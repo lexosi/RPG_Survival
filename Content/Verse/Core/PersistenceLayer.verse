@@ -60,3 +60,17 @@ PlayerEconomy<public> := class<final><persistable>:
     V1:?PlayerEconomy_V1 = false
 
 var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
+
+# =====================================================================
+# Funciones Load/Save — paso 3a: solo LoadPlayerCore mínimo.
+# Sin Logger. Sin <transacts>. Sin validación defensiva.
+# Aísla técnicamente acceso weak_map + option-unwrap.
+# Variable local nombrada CoreData para evitar colisión con namespace Core.
+# =====================================================================
+
+LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
+    var CoreData:PlayerCore_V1 = PlayerCore_V1{}
+    if (Existing := PlayerCoreMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set CoreData = V1Data
+    CoreData
