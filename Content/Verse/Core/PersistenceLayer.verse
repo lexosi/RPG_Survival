@@ -1,5 +1,6 @@
 using { /Verse.org/Simulation }
 using { /UnrealEngine.com/Temporary/Diagnostics }
+using { Verse.Core.Logger }
 
 # =====================================================================
 # Constantes de validación defensiva (PERSISTENCE_MAP §10.1)
@@ -75,9 +76,9 @@ PlayerEconomy<public> := class<final><persistable>:
 var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
 
 # =====================================================================
-# Funciones Load/Save — paso 3b: LoadPlayerCore con validación defensiva.
-# Sin Logger todavía. Validación via vars locales Safe* + reconstrucción
-# de struct al final. Structs immutable obligan reasignación entera.
+# Funciones Load/Save — paso 3c: LoadPlayerCore con Logger.LogWarn.
+# Logger solo se llama cuando una validación detecta corrupción real
+# (no en path normal). Función sigue SIN <transacts> (validado 3b).
 # =====================================================================
 
 LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
@@ -87,15 +88,20 @@ LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
             set CoreData = V1Data
     var SafeGold:int = CoreData.Gold
     if (SafeGold < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Gold negativo, corrigiendo a 0")
         set SafeGold = 0
     if (SafeGold > MAX_REASONABLE_GOLD):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Gold excede cap, capping")
         set SafeGold = MAX_REASONABLE_GOLD
     var SafeLevel:int = CoreData.Level
     if (SafeLevel < 1):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Level menor que 1, corrigiendo a 1")
         set SafeLevel = 1
     if (SafeLevel > MAX_LEVEL):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Level excede cap, capping")
         set SafeLevel = MAX_LEVEL
     var SafeXP:int = CoreData.XP
     if (SafeXP < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.XP negativo, corrigiendo a 0")
         set SafeXP = 0
     PlayerCore_V1{Gold := SafeGold, Level := SafeLevel, XP := SafeXP}
