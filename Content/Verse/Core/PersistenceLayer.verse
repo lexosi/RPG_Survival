@@ -2,6 +2,19 @@ using { /Verse.org/Simulation }
 using { /UnrealEngine.com/Temporary/Diagnostics }
 
 # =====================================================================
+# Constantes de validación defensiva (PERSISTENCE_MAP §10.1)
+# F1+ probable mover a Generated/ cuando Python exporte desde
+# data/economy/balance_caps.json. Por ahora locales en este módulo.
+# =====================================================================
+
+MAX_REASONABLE_GOLD:int = 1000000000
+MAX_LEVEL:int = 1000
+MAX_REASONABLE_VBUCKS:int = 100000
+MAX_BASE_LEVEL:int = 100
+MAX_REASONABLE_QUESTS:int = 10000
+MAX_INVENTORY_SLOTS:int = 500
+
+# =====================================================================
 # Bucket 1: PlayerCore — currencies, level, XP, stats base
 # Schema completo en docs/PERSISTENCE_MAP.md §3
 # =====================================================================
@@ -62,10 +75,9 @@ PlayerEconomy<public> := class<final><persistable>:
 var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
 
 # =====================================================================
-# Funciones Load/Save — paso 3a: solo LoadPlayerCore mínimo.
-# Sin Logger. Sin <transacts>. Sin validación defensiva.
-# Aísla técnicamente acceso weak_map + option-unwrap.
-# Variable local nombrada CoreData para evitar colisión con namespace Core.
+# Funciones Load/Save — paso 3b: LoadPlayerCore con validación defensiva.
+# Sin Logger todavía. Validación via vars locales Safe* + reconstrucción
+# de struct al final. Structs immutable obligan reasignación entera.
 # =====================================================================
 
 LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
@@ -73,4 +85,17 @@ LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
     if (Existing := PlayerCoreMap[InPlayer]):
         if (V1Data := Existing.V1?):
             set CoreData = V1Data
-    CoreData
+    var SafeGold:int = CoreData.Gold
+    if (SafeGold < 0):
+        set SafeGold = 0
+    if (SafeGold > MAX_REASONABLE_GOLD):
+        set SafeGold = MAX_REASONABLE_GOLD
+    var SafeLevel:int = CoreData.Level
+    if (SafeLevel < 1):
+        set SafeLevel = 1
+    if (SafeLevel > MAX_LEVEL):
+        set SafeLevel = MAX_LEVEL
+    var SafeXP:int = CoreData.XP
+    if (SafeXP < 0):
+        set SafeXP = 0
+    PlayerCore_V1{Gold := SafeGold, Level := SafeLevel, XP := SafeXP}
