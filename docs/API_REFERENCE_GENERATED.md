@@ -4,7 +4,7 @@
 > **DeepSeek y otras IAs ejecutoras DEBEN consultar esto antes de llamar a cualquier función.**
 > Si una API no está aquí, **no existe en el proyecto** (todavía).
 >
-> **Decisión cerrada (Auditoría 2 — C1)**: los Core son singletons top-level estáticos. Acceso por `using { /<ProjectName>/Core/<Modulo> }` directo, NO via `Registry.GetModule<T>()`. ModuleRegistry sirve solo a Systems gameplay (Capa 2+) y expone **getters tipados estáticos generados** desde JSON manifest (no genérico `<T>` runtime — Verse no soporta reflexión). Detalle en `MODULES_DEPENDENCY_GRAPH.md` §4.7.
+> **Decisión cerrada (Auditoría 2 — C1)**: los Core son singletons top-level estáticos. Acceso por import del módulo correspondiente (path canónico `/lexosi@fortnite.com/RPG_Survival/Verse/Core/<Modulo>` o forma corta `using { Verse.Core.<Modulo> }`), NO via `Registry.GetModule<T>()`. ModuleRegistry sirve solo a Systems gameplay (Capa 2+) y expone **getters tipados estáticos generados** desde JSON manifest (no genérico `<T>` runtime — Verse no soporta reflexión). Sintaxis vigente en `VERSE_SYNTAX_GUIDE.md` §1; ver también `MODULES_DEPENDENCY_GRAPH.md` §4.7 (con aviso ⚠️ post-SPR-211 sobre §1.4).
 >
 > **Decisión cerrada (Auditoría 2 — C3)**: el EventBus operativo es **generado** desde `data/architecture/events_catalog.json`, componiendo instancias `event(payload_t)` nativas de Verse. Type-safety compile-time. Sin string-magic. NO usar `Payload:any`. Detalle en §3.5 + `BOOTSTRAP_PIPELINE.md` §11.
 
@@ -183,55 +183,70 @@ Logger.LogDebug("PlayerStats", "Recalculating stats for player {Player}")
 > **⚠️ ANTES DE TOCAR ESTE MÓDULO, LEER PERSISTENCE_MAP.md ENTERO.**
 >
 > **Acceso desde callers**: usar path absoluto a la CARPETA `Core` (no al archivo `PersistenceLayer`):
+>
 > ```verse
 > using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }
 > ```
+>
 > Razón: `PersistenceLayer.verse` no usa `module:` wrapper (los weak_maps deben ir top-level — lección 5 del VERSE_SYNTAX_GUIDE). Sus tipos son miembros directos del scope `Core`. Importar `Verse.Core.PersistenceLayer` falla con err 3506/3587 (lección 14). Spec en VERSE_SYNTAX_GUIDE §2.4.
 
 #### var PlayerCoreMap:weak_map(player, PlayerCore) = map{}
+
 **Ubicación**: `Content/Verse/Core/PersistenceLayer.verse`
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: weak_map persistente del 1er bucket. Schema en PERSISTENCE_MAP sección 3. Variable `var` top-level (requerido por Verse para persistencia). Visibilidad por defecto `<internal>` — los consumidores externos acceden vía `LoadPlayerCore()` / `SavePlayerCore()`.
 
 #### var PlayerInventoryMap:weak_map(player, PlayerInventory) = map{}
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: 2º weak_map. Schema en PERSISTENCE_MAP sección 4. Mismo patrón de declaración que `PlayerCoreMap`.
 
 #### var PlayerProgressMap:weak_map(player, PlayerProgress) = map{}
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: 3er weak_map. Schema en PERSISTENCE_MAP sección 5. Mismo patrón de declaración que `PlayerCoreMap`.
 
 #### var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: 4º weak_map. Schema en PERSISTENCE_MAP sección 6. Mismo patrón de declaración que `PlayerCoreMap`.
 
 #### LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: carga datos del jugador, aplica validación defensiva (PERSISTENCE_MAP §10.1). Retorna versión activa (`PlayerCore_V1`), no wrapper. Effect `<computes>` default (Logger compatible).
 
 #### SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 **Descripción**: guarda datos del jugador. Acepta versión activa (`PlayerCore_V1`), internamente envuelve en option-version (`PlayerCore{V1 := option{Data}}`). Effect `<transacts>` (Logger INCOMPATIBLE — Save silencioso).
 
 #### LoadPlayerInventory<public>(InPlayer:player):PlayerInventory_V1
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### SavePlayerInventory<public>(InPlayer:player, Data:PlayerInventory_V1)<transacts>:void
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### LoadPlayerProgress<public>(InPlayer:player):PlayerProgress_V1
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### SavePlayerProgress<public>(InPlayer:player, Data:PlayerProgress_V1)<transacts>:void
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### LoadPlayerEconomy<public>(InPlayer:player):PlayerEconomy_V1
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### SavePlayerEconomy<public>(InPlayer:player, Data:PlayerEconomy_V1)<transacts>:void
+
 **Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
 #### LoadPlayerData / SavePlayerData (wrappers agregadores)
+
 **Estado**: 🚧 Pendiente sprint futuro (NO implementados en SPR-008)
 **Descripción**: wrappers agregadores que invocarían las 4 funciones individuales en secuencia. SPR-008 entregó solo las 8 funciones por bucket. Si un consumidor (ej. GameManager OnPlayerSpawn) necesita carga/save full, llama las 4 funciones directamente. Decisión SPR-008: posponer wrappers hasta confirmar caso de uso real — en la mayoría de flows se carga/guarda solo el bucket relevante.
 

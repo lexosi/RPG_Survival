@@ -69,6 +69,15 @@
 
 ### 1.4 Sintaxis canónica de paths Verse (regla maestra)
 
+> ⚠️ **OBSOLETO post-SPR-211 (2026-05-07)**. Este §1.4 entero está desactualizado. Autoridad sintáctica vigente: `docs/VERSE_SYNTAX_GUIDE.md` §1 (lecciones 1, 2, 14). Resumen del cambio:
+>
+> - Path canónico real **incluye** `Verse/`: `/lexosi@fortnite.com/RPG_Survival/Verse/Core/Logger`.
+> - Sintaxis dotted relative SÍ válida y preferida (VS Code Quick Fix la ofrece): `using { Verse.Core.Logger }`.
+> - Placeholder `<ProjectName>` LITERAL falla con `vErr:S26`.
+> - Archivos sin `module:` wrapper exportan al scope de la **carpeta padre**, no al nombre del archivo (lección 14).
+>
+> Cuerpo de §1.4 conservado abajo por trazabilidad histórica. **NO usar como referencia operativa**.
+
 > **Decisión cerrada.** Toda referencia a paths Verse del proyecto sigue esta regla. Validador `dependency_cycle_check.py` falla la build si ve `/Game.Content.Verse...` (path antiguo incorrecto).
 
 **Forma correcta**:
