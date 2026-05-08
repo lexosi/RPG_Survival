@@ -39,3 +39,7 @@ __pycache__/
 # Excepción: .gitkeep para que git trackee la carpeta.
 scripts/tools/_throwaway/*
 !scripts/tools/_throwaway/.gitkeep
+
+# F-B-investigación SPR-009: directorio throwaway para tests de patrón Verse
+# Promoción a Content/Verse/Tests/ si patrón compila, else borrar.
+Content/Verse/_throwaway_pattern_tests/
