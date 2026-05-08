@@ -76,11 +76,13 @@ PlayerEconomy<public> := class<final><persistable>:
 var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
 
 # =====================================================================
-# Funciones Load/Save — paso 3d: SavePlayerCore añadido.
-# Save tiene <transacts> (escribe weak_map). NO puede usar Logger
-# (effect 'no_rollback' interno incompatible con <transacts>) — Save
-# es silencioso. Validación va en Load (PERSISTENCE_MAP §10), no en Save.
+# Funciones Load/Save — paso 3e: 8 funciones (4 Load + 4 Save).
+# Patrón Load: <computes> default, con Logger.LogWarn en validaciones.
+# Patrón Save: <transacts>, sin Logger, con if-wrap consumiendo <decides>.
+# Validaciones por bucket según campos respectivos.
 # =====================================================================
+
+# --- PlayerCore ---
 
 LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
     var CoreData:PlayerCore_V1 = PlayerCore_V1{}
@@ -109,3 +111,74 @@ LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
 
 SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void=
     if (set PlayerCoreMap[InPlayer] = PlayerCore{V1 := option{Data}}) {}
+
+# --- PlayerInventory ---
+
+LoadPlayerInventory<public>(InPlayer:player):PlayerInventory_V1=
+    var InvData:PlayerInventory_V1 = PlayerInventory_V1{}
+    if (Existing := PlayerInventoryMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set InvData = V1Data
+    var SafeMaxSlots:int = InvData.MaxSlots
+    if (SafeMaxSlots < 1):
+        Logger.LogWarn("PersistenceLayer", "PlayerInventory.MaxSlots menor que 1, corrigiendo a 20")
+        set SafeMaxSlots = 20
+    if (SafeMaxSlots > MAX_INVENTORY_SLOTS):
+        Logger.LogWarn("PersistenceLayer", "PlayerInventory.MaxSlots excede cap, capping")
+        set SafeMaxSlots = MAX_INVENTORY_SLOTS
+    var SafeSlotsUsed:int = InvData.SlotsUsed
+    if (SafeSlotsUsed < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerInventory.SlotsUsed negativo, corrigiendo a 0")
+        set SafeSlotsUsed = 0
+    if (SafeSlotsUsed > SafeMaxSlots):
+        Logger.LogWarn("PersistenceLayer", "PlayerInventory.SlotsUsed mayor que MaxSlots, capping")
+        set SafeSlotsUsed = SafeMaxSlots
+    PlayerInventory_V1{SlotsUsed := SafeSlotsUsed, MaxSlots := SafeMaxSlots}
+
+SavePlayerInventory<public>(InPlayer:player, Data:PlayerInventory_V1)<transacts>:void=
+    if (set PlayerInventoryMap[InPlayer] = PlayerInventory{V1 := option{Data}}) {}
+
+# --- PlayerProgress ---
+
+LoadPlayerProgress<public>(InPlayer:player):PlayerProgress_V1=
+    var ProgData:PlayerProgress_V1 = PlayerProgress_V1{}
+    if (Existing := PlayerProgressMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set ProgData = V1Data
+    var SafeQuestsCompleted:int = ProgData.QuestsCompleted
+    if (SafeQuestsCompleted < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerProgress.QuestsCompleted negativo, corrigiendo a 0")
+        set SafeQuestsCompleted = 0
+    if (SafeQuestsCompleted > MAX_REASONABLE_QUESTS):
+        Logger.LogWarn("PersistenceLayer", "PlayerProgress.QuestsCompleted excede cap, capping")
+        set SafeQuestsCompleted = MAX_REASONABLE_QUESTS
+    PlayerProgress_V1{QuestsCompleted := SafeQuestsCompleted, Tutorial_Completed := ProgData.Tutorial_Completed}
+
+SavePlayerProgress<public>(InPlayer:player, Data:PlayerProgress_V1)<transacts>:void=
+    if (set PlayerProgressMap[InPlayer] = PlayerProgress{V1 := option{Data}}) {}
+
+# --- PlayerEconomy ---
+
+LoadPlayerEconomy<public>(InPlayer:player):PlayerEconomy_V1=
+    var EconData:PlayerEconomy_V1 = PlayerEconomy_V1{}
+    if (Existing := PlayerEconomyMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set EconData = V1Data
+    var SafeVBucks:int = EconData.VBucks_Entitlements
+    if (SafeVBucks < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerEconomy.VBucks_Entitlements negativo, corrigiendo a 0")
+        set SafeVBucks = 0
+    if (SafeVBucks > MAX_REASONABLE_VBUCKS):
+        Logger.LogWarn("PersistenceLayer", "PlayerEconomy.VBucks_Entitlements excede cap, capping")
+        set SafeVBucks = MAX_REASONABLE_VBUCKS
+    var SafeBaseLevel:int = EconData.BaseLevel
+    if (SafeBaseLevel < 1):
+        Logger.LogWarn("PersistenceLayer", "PlayerEconomy.BaseLevel menor que 1, corrigiendo a 1")
+        set SafeBaseLevel = 1
+    if (SafeBaseLevel > MAX_BASE_LEVEL):
+        Logger.LogWarn("PersistenceLayer", "PlayerEconomy.BaseLevel excede cap, capping")
+        set SafeBaseLevel = MAX_BASE_LEVEL
+    PlayerEconomy_V1{VBucks_Entitlements := SafeVBucks, BaseLevel := SafeBaseLevel}
+
+SavePlayerEconomy<public>(InPlayer:player, Data:PlayerEconomy_V1)<transacts>:void=
+    if (set PlayerEconomyMap[InPlayer] = PlayerEconomy{V1 := option{Data}}) {}
