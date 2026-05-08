@@ -68,7 +68,7 @@
 | SPR-005 | Verse Module Registry (lookup runtime para Systems Capa 2+; **NO orquesta Core**) | SYS-072 | verse | SPR-001, SPR-004, SPR-006 | `Content/Verse/Core/ModuleRegistry.verse` + `Generated/ModuleRegistryConstants.verse` (generado por SPR-004 ext, workaround `<T>`, ver MODULES §4.7) | 1.5h |
 | SPR-006 🟢 done | Verse Logger (module namespace top-level — refactor SPR-211) | SYS-072 | verse | SPR-001 | `Core/Logger.verse` | 1h |
 | SPR-007 🟢 done | Verse Time Sync UTC (module namespace, funciones `<decides>` — refactor SPR-211) | SYS-068 | verse | SPR-006 | `Core/TimeSync.verse` | 1.5h |
-| SPR-008 | Verse Persistence Layer (4 weak_maps) | SYS-069 | verse | SPR-006 | `Core/PersistenceLayer.verse` | 2h |
+| SPR-008 🟢 done | Verse Persistence Layer (4 weak_maps) — done 2026-05-08 | SYS-069 | verse | SPR-006 | `Core/PersistenceLayer.verse`, `Tests/test_persistence_SPR008.verse` | 2h (real ~5h) |
 | SPR-009 | Verse Event Bus interno (singleton + 2 generados desde `events_catalog.json`) | SYS-072 | verse | SPR-004, SPR-006 | `Core/EventBus.verse` (placeholder) + `Generated/EventBusConstants.verse` + `Generated/EventPayloads_Generated.verse` (ambos generados por SPR-004 ext) | 1.5h |
 | SPR-010 | Verse Admin Commands + Panel | SYS-070 | verse+ui | SPR-006, SPR-008, SPR-009 | `Core/AdminCommands.verse`, `Devices/AdminPanel.verse` | 2h |
 
@@ -84,8 +84,13 @@
 
 **Notas SPR-211 (sintaxis Verse moderna)**:
 - **SPR-006 / SPR-007 ya validados con build UEFN** usando patrón `Module<public> := module:` (namespace top-level). Patrón legacy `<x>_module := class<concrete>:` + `Singleton : x_module = x_module{}` falla con err 3512 en Verse moderno.
-- **SPR-005 / SPR-008 / SPR-009 / SPR-010**: el patrón concreto debe re-evaluarse durante implementación contra build UEFN real. Caso "Core con state mutable" (SPR-008 PersistenceLayer con weak_maps) queda como caso de estudio para `VERSE_SYNTAX_GUIDE.md` §2.4. Las plantillas legacy en CONCEPT/MODULES/BOOTSTRAP están marcadas como obsoletas (cross-ref a la guide).
+- **SPR-005 / SPR-009 / SPR-010**: el patrón concreto debe re-evaluarse durante implementación contra build UEFN real. Las plantillas legacy en CONCEPT/MODULES/BOOTSTRAP están marcadas como obsoletas (cross-ref a la guide).
 - Autoridad sintáctica vigente: `docs/VERSE_SYNTAX_GUIDE.md`.
+
+**Notas SPR-008 (cierre 2026-05-08)**:
+- PersistenceLayer.verse con 4 buckets + 8 funciones validadas. Test in-session PASS. Caso de estudio §2.4 del VERSE_SYNTAX_GUIDE rellenado con patrón canónico.
+- 2 lecciones nuevas añadidas al guide (14: file scope vs module scope; 15: set weak_map propaga decides).
+- Tag final: `SPR-008`. Tags incrementales (debugging path): `SPR-008-step1` a `SPR-008-step3.5a`.
 
 ---
 

@@ -819,40 +819,50 @@ Si es absolutamente necesario:
 ### 10.1 Patrón obligatorio (con option-version)
 
 ```verse
-LoadPlayerCore(InPlayer:player)<transacts>:PlayerCore_V1 =
-    var Core:PlayerCore_V1 = PlayerCore_V1{}
+# Sintaxis validada SPR-008 con build UEFN limpio + test in-session PASS.
+# Diferencias vs versión previa de este doc:
+# - Sin <transacts> (Load es <computes> default — permite Logger).
+# - Sin '?' tras MapName[InPlayer] (acceso weak_map propaga <decides> que el if consume).
+# - var local nombrada CoreData (no Core) para evitar colisión con namespace Verse/Core.
+# - set CoreData.Field = X NO funciona (structs immutable). Reasignar struct entera al final.
 
-    if (Existing := PlayerCore_Map[InPlayer]?):
-        if (V1_Data := Existing.V1?):
-            set Core = V1_Data
-        # else: jugador con datos pero sin V1 poblada → caso de migración futura
+LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
+    var CoreData:PlayerCore_V1 = PlayerCore_V1{}
+    if (Existing := PlayerCoreMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set CoreData = V1Data
 
     # === VALIDACIONES DEFENSIVAS ===
+    # Reasignación entera al final (structs immutable — err 3509 si 'set Var.Field = X')
 
-    # Gold no puede ser negativo (corruption check)
-    if (Core.Gold < 0):
-        Logger.Error("PlayerCore.Gold negativo, corrigiendo. Player: {InPlayer}")
-        set Core.Gold = 0
+    var SafeGold:int = CoreData.Gold
+    if (SafeGold < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Gold negativo, corrigiendo a 0")
+        set SafeGold = 0
+    if (SafeGold > MAX_REASONABLE_GOLD):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Gold excede cap, capping")
+        set SafeGold = MAX_REASONABLE_GOLD
 
-    # Gold no puede exceder cap razonable (anti-exploit)
-    if (Core.Gold > MAX_REASONABLE_GOLD):
-        Logger.Warn("PlayerCore.Gold exceeds cap. Player: {InPlayer}, Gold: {Core.Gold}")
-        set Core.Gold = MAX_REASONABLE_GOLD
+    var SafeLevel:int = CoreData.Level
+    if (SafeLevel < 1):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Level menor que 1, corrigiendo")
+        set SafeLevel = 1
+    if (SafeLevel > MAX_LEVEL):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.Level excede cap, capping")
+        set SafeLevel = MAX_LEVEL
 
-    # Level dentro de rango
-    if (Core.Level < 1):
-        set Core.Level = 1
-    if (Core.Level > MAX_LEVEL):
-        Logger.Warn("Level above max, capping")
-        set Core.Level = MAX_LEVEL
+    var SafeXP:int = CoreData.XP
+    if (SafeXP < 0):
+        Logger.LogWarn("PersistenceLayer", "PlayerCore.XP negativo, corrigiendo a 0")
+        set SafeXP = 0
 
-    # Stats no negativos
-    if (Core.HP_Max < 1): set Core.HP_Max = 100
-    if (Core.Stamina_Max < 1): set Core.Stamina_Max = 100
+    PlayerCore_V1{Gold := SafeGold, Level := SafeLevel, XP := SafeXP}
 
-    # ... más validaciones ...
+# Save (sin Logger — incompatible con <transacts>).
+# 'if (set ...) {}' wrapper consume <decides> propagado por escritura weak_map (lección 15).
 
-    return Core
+SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void=
+    if (set PlayerCoreMap[InPlayer] = PlayerCore{V1 := option{Data}}) {}
 ```
 
 ### 10.2 Por qué esto es crítico

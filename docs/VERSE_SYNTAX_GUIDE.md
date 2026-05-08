@@ -121,6 +121,39 @@ Naming: `Get{Singular}{PascalCaseName}()`. Snake_case → PascalCase.
 
 Si `Module<public>:` expone función con tipo de retorno `[]companion_def`, el `companion_def` debe ser `<public>`. Si no, err `3593`.
 
+### Lección 14 — Archivos sin `module:` wrapper exportan al scope de la CARPETA padre
+
+`PersistenceLayer.verse` con declaraciones top-level (sin `module:`) hace que sus tipos sean miembros de **`Verse/Core/`** (la carpeta), NO de `Verse/Core/PersistenceLayer/`.
+
+```verse
+# ❌ Falla con err 3506: "Unknown member 'PersistenceLayer' in 'Core'"
+# Falla con err 3587: "The identifier 'PersistenceLayer' does not refer to a logical scope"
+using { Verse.Core.PersistenceLayer }
+
+# ✅ Funciona — importa toda la carpeta Core
+using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }
+# o equivalente:
+using { Verse.Core }
+```
+
+**Implicación**: Cores con state mutable (PersistenceLayer SPR-008) que NO pueden envolverse en `module:` (lección 5: weak_maps obligatorios top-level) comparten scope con otros Cores de la misma carpeta. Logger/TimeSync (que SÍ usan `module:`) tienen namespace propio y se importan dotted.
+
+### Lección 15 — `set weak_map[K] = V` propaga `<decides>`
+
+Escribir a weak_map es failable (la key puede no existir). Propaga `<decides>` al contexto.
+
+```verse
+# ❌ Falla con err 3512: "decides effect not allowed"
+SavePlayerCore<public>(P:player, D:PlayerCore_V1)<transacts>:void=
+    set PlayerCoreMap[P] = PlayerCore{V1 := option{D}}
+
+# ✅ Funciona — if consume <decides>
+SavePlayerCore<public>(P:player, D:PlayerCore_V1)<transacts>:void=
+    if (set PlayerCoreMap[P] = PlayerCore{V1 := option{D}}) {}
+```
+
+El bloque `{}` vacío del `if` es intencional: no hace nada en éxito (la asignación ya ocurrió en la condición). En fallo improbable (key inválida), no se asigna y la función retorna sin error.
+
 ---
 
 ## §2 Patrones canónicos verificados
@@ -194,14 +227,95 @@ Companions_Generated<public> := module:
         array{ GetCompanionDragonFire() }
 ```
 
-### §2.4 Core con state mutable (PENDIENTE — TBD SPR-008+)
+### §2.4 Core con state mutable (caso de estudio: PersistenceLayer SPR-008)
 
-> Bloqueado. PersistenceLayer (SPR-008) será caso de estudio. Posibles approaches:
-> - `weak_map` top-level (única var top-level legal — lección 5).
-> - State dentro de class instances no expuestas top-level.
-> - Singleton vía `creative_device` si todo lo demás falla (último recurso, rompe Capa 0).
->
-> Cuando SPR-008 valide approach → actualizar esta sección.
+> Validado con build UEFN limpio + test in-session PASS (2026-05-08).
+
+#### Patrón canónico
+
+Para Cores que necesitan state persistente (`weak_map`), NO se puede usar `Module<public> := module:` (lección 5: weak_maps DEBEN ir top-level, no dentro de module). Patrón validado:
+
+```verse
+# Content/Verse/Core/PersistenceLayer.verse
+using { /Verse.org/Simulation }
+using { /UnrealEngine.com/Temporary/Diagnostics }
+using { Verse.Core.Logger }
+
+# Constantes de validación (top-level, sin 'var')
+MAX_REASONABLE_GOLD:int = 1000000000
+
+# Schema V1 (struct persistable)
+PlayerCore_V1<public> := struct<persistable>:
+    Gold:int = 0
+    Level:int = 1
+    XP:int = 0
+
+# Wrapper option-version (class<final><persistable>)
+PlayerCore<public> := class<final><persistable>:
+    V1:?PlayerCore_V1 = false
+
+# Weak_map top-level (única var top-level legal — lección 5)
+var PlayerCoreMap:weak_map(player, PlayerCore) = map{}
+
+# Load (effect <computes> default — Logger compatible)
+LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
+    var CoreData:PlayerCore_V1 = PlayerCore_V1{}
+    if (Existing := PlayerCoreMap[InPlayer]):
+        if (V1Data := Existing.V1?):
+            set CoreData = V1Data
+    var SafeGold:int = CoreData.Gold
+    if (SafeGold < 0):
+        Logger.LogWarn("PersistenceLayer", "Gold negativo, corrigiendo")
+        set SafeGold = 0
+    if (SafeGold > MAX_REASONABLE_GOLD):
+        Logger.LogWarn("PersistenceLayer", "Gold excede cap")
+        set SafeGold = MAX_REASONABLE_GOLD
+    PlayerCore_V1{Gold := SafeGold, Level := CoreData.Level, XP := CoreData.XP}
+
+# Save (effect <transacts> — Logger INCOMPATIBLE, sin logging)
+SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void=
+    if (set PlayerCoreMap[InPlayer] = PlayerCore{V1 := option{Data}}) {}
+```
+
+#### Reglas validadas (consolidan lecciones 5/8/14/15)
+
+1. **Weak_maps top-level OBLIGATORIO** sin `module:` wrapper (lección 5).
+2. **Constantes int top-level** SIN `var` permitidas (`MAX_X:int = N`).
+3. **Acceso weak_map**: `if (Existing := MapName[Key])` SIN `?`. El access propaga `<decides>` que el `if` consume.
+4. **Option-unwrap**: `if (V1Data := Existing.V1?)` CON `?`.
+5. **Reasignación struct entera**: `set Var = NewStruct{...}`. NO `set Var.Field = X` (err 3509 — structs immutable).
+6. **Vars locales mutables**: `var X:int = 0` + `set X = ...` permitido en función.
+7. **Load sin `<transacts>`**: contexto `<computes>` default permite `Logger.LogWarn`.
+8. **Save con `<transacts>`**: Logger INCOMPATIBLE (lección 9 nueva). Save silencioso.
+9. **Save necesita if-wrap**: `if (set Map[K] = V) {}` consume `<decides>` propagado por weak_map write.
+10. **Option literal**: `option{Data}` válido para construir option poblada.
+11. **Archetype constructor como retorno**: `PlayerCore_V1{Field := SafeVar}` última línea OK en función `<computes>`.
+12. **Import desde caller**: usar path absoluto a CARPETA, no a archivo (lección 14):
+    - ✅ `using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }`
+    - ❌ `using { Verse.Core.PersistenceLayer }` (err 3506/3587)
+
+#### Caller consume símbolos directos (sin prefijo)
+
+```verse
+# Desde Systems/Player/PlayerStats.verse
+using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }
+
+OnPlayerSpawn(P:player):void=
+    Core := LoadPlayerCore(P)         # Sin prefijo PersistenceLayer.
+    NewCore := PlayerCore_V1{Gold := Core.Gold + 100, Level := Core.Level, XP := Core.XP}
+    SavePlayerCore(P, NewCore)        # Save es <transacts>:void — llamada directa, sin if-wrap
+```
+
+#### Limitaciones reconocidas
+
+- **Sin namespace propio**: símbolos de PersistenceLayer (`PlayerCore_V1`, `LoadPlayerCore`, etc.) comparten scope con Logger/TimeSync. Sin colisión actual pero vigilar futuro.
+- **Save no loggea errors**: incompatibilidad effects `<transacts>` + `<no_rollback>` interno del Logger. Si SPR posterior necesita logging desde Save, opciones: (a) llamar Logger ANTES del set en caller, (b) wrapper `SavePlayerCore_Loud` que loggea antes.
+
+#### Referencias
+
+- Daily log: `docs/dailylog/DL_2026-05-08_SPR-008_lexosi.md`.
+- Postmortem (si aplica): no requerido — SPR cerró sin incidentes graves.
+- Test validation: `Content/Verse/Tests/test_persistence_SPR008.verse` con HUD PASS.
 
 ---
 
@@ -218,6 +332,8 @@ Companions_Generated<public> := module:
 | `NAME := struct_def{...}` top-level dentro module | `3547` + `3512` | 9, 10, 11 | Función getter (Patrón 3) |
 | `NAME<public>:type = type{...}` top-level dentro module | `3512` | 11 | Función getter (Patrón 3) |
 | Module function retorna tipo no `<public>` | `3593` | 7, 13 | Marcar tipo `<public>` |
+| `using { Verse.Core.PersistenceLayer }` (archivo sin module:) | `3506` + `3587` | 14 | `using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }` (path a CARPETA) |
+| `set weak_map[K] = V` directo en `<transacts>` | `3512` ('decides effect not allowed') | 15 | Envolver en `if (set Map[K] = V) {}` |
 
 ---
 
@@ -268,6 +384,17 @@ Effects conocidos:
 | `<varies>` | Non-deterministic (TBD). |
 
 > Reglas exactas de propagación de efectos: TBD. Bloqueado hasta SPR siguiente investigue casos edge. Por ahora: si error `3512` aparece, mover construcción a function getter (lecciones 11+12).
+
+### Reglas validadas SPR-008
+
+| Effect | Compatible con `<computes>` default | Compatible con `<transacts>` |
+|---|---|---|
+| Logger.LogWarn / LogError / LogInfo | ✅ Sí | ❌ NO (err 3512 'no_rollback effect not allowed') |
+| `set weak_map[K] = V` | Propaga `<decides>` al caller | Propaga `<decides>` al caller |
+| Archetype constructor `T{...}` | ✅ OK como retorno | ✅ OK |
+| `var Local:int = 0` + `set Local = X` | ✅ OK en función | ✅ OK en función |
+
+**Implicación operativa**: funciones `<transacts>` (típicamente Save de persistencia) NO pueden loggear errores. Validación + logging va en `<computes>` default (típicamente Load).
 
 ---
 

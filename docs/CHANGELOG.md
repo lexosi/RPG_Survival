@@ -46,6 +46,47 @@
 > **Sección donde se acumulan cambios del sprint en curso.**
 > **Mover a versión correspondiente al cerrar fase.**
 
+### SPR-008 — PersistenceLayer (2026-05-08)
+
+> **Contexto**: implementación del 4º Core foundational del proyecto. 4 weak_maps persistentes (PlayerCore, PlayerInventory, PlayerProgress, PlayerEconomy) con patrón option-version oficial Epic 8/8/2025. 8 funciones públicas Load/Save con validación defensiva. Caso de estudio para §2.4 del VERSE_SYNTAX_GUIDE.
+
+#### Added
+- `Content/Verse/Core/PersistenceLayer.verse` — 4 buckets + 8 funciones públicas validadas con build UEFN limpio.
+  - `PlayerCore_V1` + `PlayerCore` wrapper + `PlayerCoreMap` weak_map.
+  - `PlayerInventory_V1` + `PlayerInventory` wrapper + `PlayerInventoryMap` weak_map.
+  - `PlayerProgress_V1` + `PlayerProgress` wrapper + `PlayerProgressMap` weak_map.
+  - `PlayerEconomy_V1` + `PlayerEconomy` wrapper + `PlayerEconomyMap` weak_map.
+  - 4 funciones `LoadPlayerX<public>(InPlayer:player):PlayerX_V1` con validación defensiva + Logger.LogWarn.
+  - 4 funciones `SavePlayerX<public>(InPlayer:player, Data:PlayerX_V1)<transacts>:void` con if-wrap.
+  - 6 constantes top-level `MAX_*` para validación defensiva.
+- `Content/Verse/Tests/test_persistence_SPR008.verse` — test device manual. Test in-session PASSED 2026-05-08 (Save → logout → login → Load → match Gold=12345, Level=42, XP=67890).
+- `docs/VERSE_SYNTAX_GUIDE.md` §2.4 rellenado con patrón canónico Core con state mutable.
+- `docs/VERSE_SYNTAX_GUIDE.md` §1 lección 14 nueva (file scope vs module scope) + lección 15 nueva (set weak_map propaga decides).
+- `docs/VERSE_SYNTAX_GUIDE.md` §3 anti-patrones tabla — 2 entries nuevos.
+- `docs/VERSE_SYNTAX_GUIDE.md` §7 effects tabla — reglas validadas SPR-008.
+- `docs/dailylog/DL_2026-05-08_SPR-008_lexosi.md` — daily log del cierre.
+
+#### Changed
+- `docs/PERSISTENCE_MAP.md` §10.1 — ejemplo `LoadPlayerCore` actualizado con sintaxis real validada (sin `<transacts>`, sin `?` tras `MapName[K]`, var nombrada `CoreData`, reasignación struct entera).
+- `docs/API_REFERENCE_GENERATED.md` §3.4 — firmas reales (sin module wrapper, retorno `_V1`, nombre weak_map real). 8 funciones marcadas ✅ Implementada. Nota import path actualizada.
+- `docs/MODULES_DEPENDENCY_GRAPH.md` §4 PersistenceLayer — estado ✅ done + nota import path absoluto.
+- `docs/TESTING_PROTOCOL.md` §6.1 — plantilla `test_persistence_SPR008` actualizada a versión real validada.
+- `docs/SPRINTS_BACKLOG.md` — SPR-008 marcado 🟢 done.
+
+#### Lessons learned (proceso)
+
+- **Big-bang vs incremental**: el primer intento del paso 3 fue big-bang (8 funciones de golpe) y falló con 47 errors simultáneos. Rollback. Re-aproximamos con paso 3 incremental (3a-3e), descubriendo cada problema técnico aislado. Lesson: **siempre validar cada técnica nueva en aislamiento antes de combinar**.
+- **Commit cada milestone**: en algún punto se saltó commit intermedio entre paso 2 y paso 3 ("paso 2 sin riesgo nuevo, no merece commit"). Tras rollback de paso 3, paso 2 también se perdió. Lesson: **commit cada build limpio sin importar qué tan trivial parezca**.
+- **Doc autoritativo puede tener drift**: PERSISTENCE_MAP §10.1 prescribía `<transacts>` en Load + `?` tras `Map[K]`. Build UEFN reveló que ambas eran innecesarias/incorrectas. Lesson: **build real es la única fuente de verdad sintáctica**.
+
+#### Done criteria SPR-008
+
+- [x] PersistenceLayer.verse compila sin warnings.
+- [x] 4 weak_maps top-level declarados.
+- [x] Patrón option-version aplicado.
+- [x] 8 funciones públicas Get/Set con effects correctos.
+- [x] Test in-session: Save → logout → login → Load → match. **PASS 2026-05-08**.
+
 ### RECOVERY-2026-05-08 — Pérdida de `.git` local + reinit con remote GitHub
 
 > **Contexto**: durante limpieza de archivos temporales PC del 2026-05-07 noche se borró accidentalmente la carpeta `.git` del proyecto. Sin remote/sync/backup. Historial completo + tags SPR-001..SPR-211 perdidos localmente. Working tree (código + docs) intacto al 100%.

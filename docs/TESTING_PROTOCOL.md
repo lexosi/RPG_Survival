@@ -420,52 +420,64 @@ smoke_test_master := class(creative_device):
 
 Es **el más complejo** porque requiere logout + login.
 
-> **Acceso a Core (D-A7)**: `PersistenceLayer` es singleton top-level — NO `@editable`. Se accede por `using { /<ProjectName>/Core/PersistenceLayer }` y se llama `Persistence.LoadPlayerCore(InPlayer)` / `SavePlayerCore(InPlayer, Data)` (firmas reales de `API_REFERENCE_GENERATED.md` §3.4 — no hay setters granulares por campo, se carga el struct, se modifica, se guarda).
+> **Acceso a Core**: `PersistenceLayer.verse` no usa `module:` wrapper (weak_maps obligatorios top-level — lección 5 VERSE_SYNTAX_GUIDE). Sus símbolos viven en el scope de la carpeta `Verse/Core/`. Imports: dotted moderno para Logger, path absoluto a CARPETA para tipos/funciones de PersistenceLayer. Funciones top-level se llaman SIN prefijo `Persistence.`. Spec en `VERSE_SYNTAX_GUIDE.md` §2.4 + `API_REFERENCE_GENERATED.md` §3.4.
+
+> **Plantilla actualizada SPR-008 (2026-05-08)**. Versión real validada con build UEFN limpio + test in-session PASS. Mirror del archivo `Content/Verse/Tests/test_persistence_SPR008.verse`.
 
 ```verse
 using { /Fortnite.com/Devices }
 using { /Verse.org/Simulation }
 using { /UnrealEngine.com/Temporary/Diagnostics }
-using { /<ProjectName>/Core/Logger }
-using { /<ProjectName>/Core/PersistenceLayer }
+using { /UnrealEngine.com/Temporary/UI }
+using { Verse.Core.Logger }
+using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }
 
 test_persistence_SPR008 := class(creative_device):
+
     @editable WriteButton:button_device = button_device{}
     @editable ReadButton:button_device = button_device{}
     @editable HUD:hud_message_device = hud_message_device{}
 
     OnBegin<override>()<suspends>:void=
+        Logger.LogInfo("test_persistence_SPR008", "Device iniciado. Pulsar Write → logout → login → Read.")
         WriteButton.InteractedWithEvent.Subscribe(WriteTestData)
         ReadButton.InteractedWithEvent.Subscribe(ReadAndVerify)
 
     WriteTestData(Agent:agent):void=
-        # Castear agent → player (los botones emiten agent; weak_map necesita player)
         if (P := player[Agent]):
-            # Cargar struct, modificar, guardar (no hay setters granulares)
-            var Core:PlayerCore = Persistence.LoadPlayerCore(P)
-            set Core.Gold = 12345
-            set Core.Gems = 678
-            set Core.Level = 42
-            Persistence.SavePlayerCore(P, Core)
-            HUD.SetText(MakeMessage("Datos escritos. Cierra sesión y vuelve a entrar."))
+            # Reasignación struct entera (structs immutable — set Var.Field = X falla con err 3509).
+            # SPR-008 mínimo: solo Gold/Level/XP en PlayerCore_V1 (sin Gems).
+            TestData:PlayerCore_V1 = PlayerCore_V1{Gold := 12345, Level := 42, XP := 67890}
+            SavePlayerCore(P, TestData)
+            Logger.LogInfo("test_persistence_SPR008", "WRITE — Gold=12345, Level=42, XP=67890")
+            HUD.SetText(MakeMessage("Datos escritos. Logout completo + login + pulsar Read."))
         else:
-            Logger.LogError("test_persistence_SPR008", "Agent no es player válido")
+            Logger.LogError("test_persistence_SPR008", "WRITE — Agent no es player válido")
+            HUD.SetText(MakeMessage("ERROR: agent no es player"))
 
     ReadAndVerify(Agent:agent):void=
         if (P := player[Agent]):
-            Core := Persistence.LoadPlayerCore(P)
-
+            # LoadPlayerCore retorna versión activa (V1), no wrapper.
+            LoadedData:PlayerCore_V1 = LoadPlayerCore(P)
             var Failures:int = 0
-            if (Core.Gold <> 12345): set Failures += 1
-            if (Core.Gems <> 678): set Failures += 1
-            if (Core.Level <> 42): set Failures += 1
-
+            if (LoadedData.Gold <> 12345):
+                set Failures = Failures + 1
+                Logger.LogError("test_persistence_SPR008", "Gold mismatch")
+            if (LoadedData.Level <> 42):
+                set Failures = Failures + 1
+                Logger.LogError("test_persistence_SPR008", "Level mismatch")
+            if (LoadedData.XP <> 67890):
+                set Failures = Failures + 1
+                Logger.LogError("test_persistence_SPR008", "XP mismatch")
             if (Failures = 0):
-                HUD.SetText(MakeMessage("✅ Persistence PASS"))
+                HUD.SetText(MakeMessage("PERSISTENCE PASS"))
             else:
-                HUD.SetText(MakeMessage("❌ Persistence FAIL: {Failures} mismatches"))
+                HUD.SetText(MakeMessage("PERSISTENCE FAIL: {Failures} mismatches"))
         else:
-            Logger.LogError("test_persistence_SPR008", "Agent no es player válido")
+            Logger.LogError("test_persistence_SPR008", "READ — Agent no es player válido")
+            HUD.SetText(MakeMessage("ERROR: agent no es player"))
+
+    MakeMessage<localizes>(Text:string):message = "{Text}"
 ```
 
 ### 6.2 Procedimiento manual

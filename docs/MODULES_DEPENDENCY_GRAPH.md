@@ -281,10 +281,12 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 
 ### 4.4 `Core/PersistenceLayer.verse` (SYS-069, SPR-008)
 
+- ✅ **SPR-008 implementado 2026-05-08**. 4 buckets + 8 funciones Load/Save. Build UEFN limpio + test in-session PASS.
 - 📤 Deps: `Logger` 🔒
 - 📥 Consumidores (escriben weak_maps): **24 módulos** (ver `PERSISTENCE_MAP.md`)
 - ⚠️ **Cambio crítico**: añadir campo a un weak_map = solo opcional con default. Renombrar/eliminar = banea el mapa (ver `EMERGENCY_ROLLBACK.md`).
-- 🏗️ **Arquitectura**: los `weak_map` son variables `var` a nivel de módulo (declaración top-level requerida por Verse para persistencia). El módulo expone funciones `Load*/Save*`. Mismo patrón estático que el resto de Core.
+- 🏗️ **Arquitectura**: los 4 `weak_map` son variables `var` top-level (sin `module:` wrapper — weak_maps no compilan dentro de module, lección 5 VERSE_SYNTAX_GUIDE). El archivo expone tipos y funciones directos al scope de la carpeta `Verse/Core/`. Spec autoritativa del patrón en `VERSE_SYNTAX_GUIDE.md` §2.4.
+- 📦 **Import desde callers**: `using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }` (path a la CARPETA, no al archivo). Importar `Verse.Core.PersistenceLayer` falla con err 3506/3587 (lección 14).
 
 ### 4.5 `Core/BigNumbers.verse` (SYS-067)
 

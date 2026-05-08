@@ -182,60 +182,58 @@ Logger.LogDebug("PlayerStats", "Recalculating stats for player {Player}")
 
 > **⚠️ ANTES DE TOCAR ESTE MÓDULO, LEER PERSISTENCE_MAP.md ENTERO.**
 >
-> **Arquitectura (C1)**: singleton top-level. Los 4 `weak_map` son variables `var` declaradas a nivel de módulo (requerido por Verse para persistencia). Acceso por `using { /<ProjectName>/Core/PersistenceLayer }`.
->
-> **Patrón de carga "nuevo jugador" (canónico)**: las firmas `Load*<transacts>:Player*` devuelven el struct directo. Para distinguir "primer login" del "default vacío" **NO se usa `<decides>` ni un primer-login flag** — el diseño retorna `Player<X>{}` cuando el `weak_map` no tiene entrada y aplica validación defensiva siempre. La distinción semántica "primera vez" se hace con campos persistentes explícitos (ej. `Tutorial_Completed`, `FirstRebirth_Done`). Spec autoritativa en `PERSISTENCE_MAP.md` §8.3 (versionado de schema) + §10 (validación defensiva). Cerrado en Auditoría 2 — el sub-hito "primer-login con `<decides>`" planteado durante el patch C3 fue descartado tras re-verificar el patrón existente.
+> **Acceso desde callers**: usar path absoluto a la CARPETA `Core` (no al archivo `PersistenceLayer`):
+> ```verse
+> using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }
+> ```
+> Razón: `PersistenceLayer.verse` no usa `module:` wrapper (los weak_maps deben ir top-level — lección 5 del VERSE_SYNTAX_GUIDE). Sus tipos son miembros directos del scope `Core`. Importar `Verse.Core.PersistenceLayer` falla con err 3506/3587 (lección 14). Spec en VERSE_SYNTAX_GUIDE §2.4.
 
-#### var PlayerCore_Map:weak_map(player, PlayerCore) = map{}
+#### var PlayerCoreMap:weak_map(player, PlayerCore) = map{}
 **Ubicación**: `Content/Verse/Core/PersistenceLayer.verse`
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: weak_map persistente del 1er bucket. Schema en PERSISTENCE_MAP sección 3. Variable `var` declarada a nivel de módulo (requerido por Verse para persistencia, ver cabecera §3.4). Visibilidad por defecto `<internal>` — accesible solo dentro del módulo `PersistenceLayer`. Los consumidores externos acceden vía `LoadPlayerCore()` / `SavePlayerCore()`.
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: weak_map persistente del 1er bucket. Schema en PERSISTENCE_MAP sección 3. Variable `var` top-level (requerido por Verse para persistencia). Visibilidad por defecto `<internal>` — los consumidores externos acceden vía `LoadPlayerCore()` / `SavePlayerCore()`.
 
-#### var PlayerInventory_Map:weak_map(player, PlayerInventory) = map{}
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: 2º weak_map. Schema en PERSISTENCE_MAP sección 4. Mismo patrón de declaración que `PlayerCore_Map`.
+#### var PlayerInventoryMap:weak_map(player, PlayerInventory) = map{}
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: 2º weak_map. Schema en PERSISTENCE_MAP sección 4. Mismo patrón de declaración que `PlayerCoreMap`.
 
-#### var PlayerProgress_Map:weak_map(player, PlayerProgress) = map{}
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: 3er weak_map. Schema en PERSISTENCE_MAP sección 5. Mismo patrón de declaración que `PlayerCore_Map`.
+#### var PlayerProgressMap:weak_map(player, PlayerProgress) = map{}
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: 3er weak_map. Schema en PERSISTENCE_MAP sección 5. Mismo patrón de declaración que `PlayerCoreMap`.
 
-#### var PlayerEconomy_Map:weak_map(player, PlayerEconomy) = map{}
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: 4º weak_map. Schema en PERSISTENCE_MAP sección 6. Mismo patrón de declaración que `PlayerCore_Map`.
+#### var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: 4º weak_map. Schema en PERSISTENCE_MAP sección 6. Mismo patrón de declaración que `PlayerCoreMap`.
 
-#### LoadPlayerCore(InPlayer:player)<transacts>:PlayerCore
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: carga datos del jugador, aplica validación defensiva.
+#### LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: carga datos del jugador, aplica validación defensiva (PERSISTENCE_MAP §10.1). Retorna versión activa (`PlayerCore_V1`), no wrapper. Effect `<computes>` default (Logger compatible).
 
-#### SavePlayerCore(InPlayer:player, Data:PlayerCore)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: guarda datos del jugador.
+#### SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
+**Descripción**: guarda datos del jugador. Acepta versión activa (`PlayerCore_V1`), internamente envuelve en option-version (`PlayerCore{V1 := option{Data}}`). Effect `<transacts>` (Logger INCOMPATIBLE — Save silencioso).
 
-#### LoadPlayerInventory(InPlayer:player)<transacts>:PlayerInventory
-**Estado**: 🚧 Pendiente SPR-008
+#### LoadPlayerInventory<public>(InPlayer:player):PlayerInventory_V1
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### SavePlayerInventory(InPlayer:player, Data:PlayerInventory)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
+#### SavePlayerInventory<public>(InPlayer:player, Data:PlayerInventory_V1)<transacts>:void
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### LoadPlayerProgress(InPlayer:player)<transacts>:PlayerProgress
-**Estado**: 🚧 Pendiente SPR-008
+#### LoadPlayerProgress<public>(InPlayer:player):PlayerProgress_V1
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### SavePlayerProgress(InPlayer:player, Data:PlayerProgress)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
+#### SavePlayerProgress<public>(InPlayer:player, Data:PlayerProgress_V1)<transacts>:void
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### LoadPlayerEconomy(InPlayer:player)<transacts>:PlayerEconomy
-**Estado**: 🚧 Pendiente SPR-008
+#### LoadPlayerEconomy<public>(InPlayer:player):PlayerEconomy_V1
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### SavePlayerEconomy(InPlayer:player, Data:PlayerEconomy)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
+#### SavePlayerEconomy<public>(InPlayer:player, Data:PlayerEconomy_V1)<transacts>:void
+**Estado**: ✅ Implementada SPR-008 (2026-05-08)
 
-#### LoadPlayerData(InPlayer:player)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: wrapper agregador que invoca las 4 funciones `LoadPlayer<X>` (Core, Inventory, Progress, Economy) en secuencia y aplica validación defensiva. Llamada típicamente una vez en `OnPlayerSpawn` desde `Devices/GameManager`. Para acceso lazy o selectivo, usar las 4 funciones individuales directamente. Decisión cerrada Auditoría 2 — M3.
-
-#### SavePlayerData(InPlayer:player)<transacts>:void
-**Estado**: 🚧 Pendiente SPR-008
-**Descripción**: wrapper agregador que invoca las 4 funciones `SavePlayer<X>` en secuencia. **Atención**: Save full es costoso (4 weak_map writes consecutivos); usar solo en eventos críticos (logout, milestone). Para writes incrementales, usar `SavePlayer<X>` específica. Decisión cerrada Auditoría 2 — M3.
+#### LoadPlayerData / SavePlayerData (wrappers agregadores)
+**Estado**: 🚧 Pendiente sprint futuro (NO implementados en SPR-008)
+**Descripción**: wrappers agregadores que invocarían las 4 funciones individuales en secuencia. SPR-008 entregó solo las 8 funciones por bucket. Si un consumidor (ej. GameManager OnPlayerSpawn) necesita carga/save full, llama las 4 funciones directamente. Decisión SPR-008: posponer wrappers hasta confirmar caso de uso real — en la mayoría de flows se carga/guarda solo el bucket relevante.
 
 ---
 
