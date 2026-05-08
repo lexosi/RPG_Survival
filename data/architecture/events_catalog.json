@@ -1,0 +1,128 @@
+{
+  "_schema_version": 1,
+  "_doc": "Catálogo declarativo de eventos cross-system. Cada entrada genera un struct Verse + una instancia event(t) en EventBus.",
+  "_validation": "scripts/build/01_validate_jsons.py debe pasar antes de commit.",
+  "_source_of_truth": "docs/MODULES_DEPENDENCY_GRAPH.md §11.2",
+  "_schema_doc": "docs/JSON_SCHEMAS.md §42",
+
+  "events": [
+    {
+      "id": "player_stats_changed",
+      "verse_struct_name": "player_stats_changed_payload",
+      "verse_event_name": "PlayerStatsChanged",
+      "emitters": ["PlayerStats"],
+      "subscribers": ["HUDController", "AchievementEngine", "SocialDisplay"],
+      "payload_fields": [
+        {"name": "Player", "type": "player", "_doc": "referencia nativa Verse al jugador afectado — usable como key directo en weak_map de persistencia"},
+        {"name": "Stat", "type": "string", "_doc": "nombre del stat: 'HP_Max', 'Strength', etc."},
+        {"name": "OldValue", "type": "int"},
+        {"name": "NewValue", "type": "int"}
+      ],
+      "_doc": "Emitido cuando un stat efectivo del jugador cambia (post-buff, post-equipment)."
+    },
+    {
+      "id": "inventory_changed",
+      "verse_struct_name": "inventory_changed_payload",
+      "verse_event_name": "InventoryChanged",
+      "emitters": ["PlayerInventory"],
+      "subscribers": ["InventoryUI", "AutoSell", "QuestEngine", "AchievementEngine"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "ItemID", "type": "int", "_doc": "ID del item afectado según items.json"},
+        {"name": "Delta", "type": "int", "_doc": "cantidad cambiada: positivo=adquirido, negativo=consumido/vendido"}
+      ],
+      "_doc": "Emitido en cualquier cambio de cantidad en inventario del jugador."
+    },
+    {
+      "id": "level_up",
+      "verse_struct_name": "level_up_payload",
+      "verse_event_name": "LevelUp",
+      "emitters": ["PlayerProgression"],
+      "subscribers": ["HUDController", "Notifications", "BattlePass", "AchievementEngine"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "OldLevel", "type": "int"},
+        {"name": "NewLevel", "type": "int"}
+      ],
+      "_doc": "Emitido cuando el jugador sube de nivel (XP threshold cruzado)."
+    },
+    {
+      "id": "currency_spent",
+      "verse_struct_name": "currency_spent_payload",
+      "verse_event_name": "CurrencySpent",
+      "emitters": ["CurrencyManager"],
+      "subscribers": ["AuditLog", "AchievementEngine", "QuestEngine"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "Currency", "type": "string", "_doc": "tipo de moneda: 'gold', 'gems', 'souls', etc."},
+        {"name": "Amount", "type": "int", "_doc": "cantidad gastada (siempre positivo)"},
+        {"name": "Source", "type": "string", "_doc": "razón del gasto: 'shop', 'craft', 'reroll', etc."}
+      ],
+      "_doc": "Emitido en cualquier gasto de moneda. Gastos negativos = ingresos van por evento separado (futuro currency_earned)."
+    },
+    {
+      "id": "companion_acquired",
+      "verse_struct_name": "companion_acquired_payload",
+      "verse_event_name": "CompanionAcquired",
+      "emitters": ["LootboxSystem", "ResourceNodes"],
+      "subscribers": ["CollectionDex", "AchievementEngine", "Notifications", "SocialDisplay"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "CompanionID", "type": "int", "_doc": "ID del companion según companions_base.json"},
+        {"name": "Rarity", "type": "int", "_doc": "rareza 0-5 (Common a Mythic)"},
+        {"name": "Variant", "type": "int", "_doc": "variante visual 0..N según definición del companion"}
+      ],
+      "_doc": "Emitido cuando jugador obtiene un companion (loot, drop, recompensa)."
+    },
+    {
+      "id": "quest_completed",
+      "verse_struct_name": "quest_completed_payload",
+      "verse_event_name": "QuestCompleted",
+      "emitters": ["QuestEngine"],
+      "subscribers": ["Notifications", "AchievementEngine", "BattlePass"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "QuestID", "type": "int", "_doc": "ID de la quest según quests JSON"},
+        {"name": "Rewards", "type": "string", "_doc": "CSV de IDs de items/currency otorgados — schema §42.2 prohibe structs anidados, F1 puede refactorizar a evento separado quest_rewards_granted si el CSV se queda corto"}
+      ],
+      "_doc": "Emitido al completar una quest (objetivos cumplidos + recompensas otorgadas)."
+    },
+    {
+      "id": "rebirth_done",
+      "verse_struct_name": "rebirth_done_payload",
+      "verse_event_name": "RebirthDone",
+      "emitters": ["PlayerRebirth"],
+      "subscribers": ["SocialDisplay", "AchievementEngine", "Leaderboard"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "RebirthCount", "type": "int", "_doc": "número total de rebirths del jugador post-este (1 = primer rebirth)"}
+      ],
+      "_doc": "Emitido tras completar un rebirth (reset progress + grant alma)."
+    },
+    {
+      "id": "zone_unlocked",
+      "verse_struct_name": "zone_unlocked_payload",
+      "verse_event_name": "ZoneUnlocked",
+      "emitters": ["ZoneManager"],
+      "subscribers": ["AchievementEngine", "Notifications", "QuestEngine"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "ZoneID", "type": "int", "_doc": "ID de la zona según zones JSON"}
+      ],
+      "_doc": "Emitido cuando jugador desbloquea acceso a una nueva zona (level/quest gate cumplido)."
+    },
+    {
+      "id": "boss_defeated",
+      "verse_struct_name": "boss_defeated_payload",
+      "verse_event_name": "BossDefeated",
+      "emitters": ["BossEncounters"],
+      "subscribers": ["AchievementEngine", "Notifications", "Leaderboard"],
+      "payload_fields": [
+        {"name": "Player", "type": "player"},
+        {"name": "BossID", "type": "int", "_doc": "ID del boss según boss config"},
+        {"name": "Time", "type": "int", "_doc": "duración del combate en segundos"}
+      ],
+      "_doc": "Emitido al derrotar un boss (incluyendo hourly boss y bosses de zona)."
+    }
+  ]
+}

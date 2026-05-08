@@ -5,4 +5,4 @@
 # See BOOTSTRAP_PIPELINE.md for rationale.
 # ============================================================
 
-# TODO SPR-009: source pendiente, archivo placeholder sin contenido.
+# TODO SPR-009-BLOCKED: source pendiente, archivo placeholder sin contenido.

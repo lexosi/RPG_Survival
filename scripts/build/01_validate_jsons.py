@@ -43,6 +43,19 @@ except Exception:
 ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = ROOT / "data"
 UPPER_SNAKE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+PASCAL_CASE = re.compile(r"^[A-Z][a-zA-Z0-9]*$")
+
+# EventBus catalog — JSON_SCHEMAS.md §42.3
+EVENTBUS_CORE_MODULES = {
+    "Logger", "EventBus", "TimeSync", "PersistenceLayer",
+    "BigNumbers", "AdminCommands", "ModuleRegistry",
+}
+EVENTBUS_PAYLOAD_TYPES = {
+    "int", "float", "string", "logic", "player",
+    "agent", "int_array", "string_array",
+}
+EVENTS_CATALOG_REL = "data/architecture/events_catalog.json"
+MODULES_MANIFEST_REL = "data/architecture/modules_manifest.json"
 
 SEV_ORDER = {"parse": 1, "schema": 2, "rule": 3, "integrity": 4, "warn": 5}
 SEV_PREFIX = {"parse": "[FAIL]", "schema": "[FAIL]", "rule": "[FAIL]",
@@ -386,6 +399,124 @@ def validate_theme_config(file: str, data: dict, rep: Report):
         # replacement_folder existe en disco, color_palette_overrides matchea UI_UX_STYLE_GUIDE.
 
 
+def validate_events_catalog(file: str, data: dict, rep: Report):
+    """JSON_SCHEMAS.md §42.3 — 8 reglas semánticas del catálogo de eventos."""
+    rule = "JSON_SCHEMAS.md §42.3"
+    events = require(rep, file, data, "events", list, rule)
+    if events is None:
+        return
+
+    # Regla 4 setup: cargar modules_manifest.json si existe.
+    manifest_path = ROOT / MODULES_MANIFEST_REL
+    manifest_exists = manifest_path.exists()
+    known_modules = set(EVENTBUS_CORE_MODULES)
+    if manifest_exists:
+        try:
+            mdata = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for m in mdata.get("modules", []):
+                if isinstance(m, dict) and isinstance(m.get("name"), str):
+                    known_modules.add(m["name"])
+        except (OSError, json.JSONDecodeError):
+            manifest_exists = False
+    if not manifest_exists:
+        print(f"[WARN] {MODULES_MANIFEST_REL} no existe — "
+              "regla 4 (emitters cross-ref) skipped, recheck cuando exista")
+
+    seen_ids, seen_struct, seen_event = set(), set(), set()
+    n_events = len(events)
+    issues_before = len(rep.issues)
+
+    for i, ev in enumerate(events):
+        ctx = f"events[{i}]"
+        if not isinstance(ev, dict):
+            rep.add(file, rule, f"{ctx} no es objeto", "schema")
+            continue
+
+        # Reglas 1-3: id / verse_struct_name / verse_event_name únicos
+        eid = require(rep, file, ev, "id", str, rule)
+        if eid is not None:
+            if eid in seen_ids:
+                rep.add(file, rule, f"{ctx}.id='{eid}' duplicado (regla 1)", "integrity")
+            seen_ids.add(eid)
+
+        sname = require(rep, file, ev, "verse_struct_name", str, rule)
+        if sname is not None:
+            if sname in seen_struct:
+                rep.add(file, rule, f"{ctx}.verse_struct_name='{sname}' duplicado (regla 2)", "integrity")
+            seen_struct.add(sname)
+
+        ename = require(rep, file, ev, "verse_event_name", str, rule)
+        if ename is not None:
+            if ename in seen_event:
+                rep.add(file, rule, f"{ctx}.verse_event_name='{ename}' duplicado (regla 3)", "integrity")
+            seen_event.add(ename)
+
+        # Regla 4: emitters existen en manifest o son Cores conocidos
+        emitters = require(rep, file, ev, "emitters", list, rule)
+        if emitters is not None:
+            for j, em in enumerate(emitters):
+                if not isinstance(em, str):
+                    rep.add(file, rule, f"{ctx}.emitters[{j}] no es string", "schema")
+                    continue
+                if em not in known_modules:
+                    if manifest_exists:
+                        rep.add(file, rule,
+                                f"{ctx}.emitters[{j}]='{em}' no existe en modules_manifest "
+                                "ni en Cores conocidos (regla 4)", "rule")
+                    else:
+                        rep.add(file, rule,
+                                f"{ctx}.emitters[{j}]='{em}' no esta en Cores conocidos "
+                                "(regla 4 — manifest absent, ERROR upgrade pendiente)", "warn")
+
+        # subscribers REQUIRED (sin cross-ref por ahora)
+        require(rep, file, ev, "subscribers", list, rule)
+
+        # Reglas 5-8 sobre payload_fields
+        pf = require(rep, file, ev, "payload_fields", list, rule)
+        if pf is None:
+            continue
+        seen_field_names = set()
+        for j, fld in enumerate(pf):
+            fctx = f"{ctx}.payload_fields[{j}]"
+            if not isinstance(fld, dict):
+                rep.add(file, rule, f"{fctx} no es objeto", "schema")
+                continue
+            fname = require(rep, file, fld, "name", str, rule)
+            ftype = require(rep, file, fld, "type", str, rule)
+
+            # Regla 8 BLOCKING (auditoría retro B1.2)
+            if fname == "PlayerID":
+                rep.add(file, rule,
+                        "Use {name: 'Player', type: 'player'} en lugar de "
+                        "{name: 'PlayerID', type: 'int'} — la API Verse publica de "
+                        "player no expone getter de identidad estable serializable. "
+                        "Ver JSON_SCHEMAS.md §42.2 + GLOSSARY.md 'Admin (player ID)'.",
+                        "rule")
+
+            # Regla 6: PascalCase
+            if fname is not None and not PASCAL_CASE.match(fname):
+                rep.add(file, rule, f"{fctx}.name='{fname}' no es PascalCase (regla 6)", "rule")
+
+            # Regla 7: sin duplicados de name dentro del mismo payload_fields
+            if fname is not None:
+                if fname in seen_field_names:
+                    rep.add(file, rule,
+                            f"{fctx}.name='{fname}' duplicado dentro de {ctx}.payload_fields (regla 7)",
+                            "integrity")
+                seen_field_names.add(fname)
+
+            # Regla 5: type permitido
+            if ftype is not None and ftype not in EVENTBUS_PAYLOAD_TYPES:
+                rep.add(file, rule,
+                        f"{fctx}.type='{ftype}' no permitido — debe estar en "
+                        f"{sorted(EVENTBUS_PAYLOAD_TYPES)} (regla 5)", "schema")
+
+    # OK summary si no añadimos issues sobre este archivo
+    new_issues = [i for i in rep.issues[issues_before:] if i[0] == file]
+    if not new_issues:
+        print(f"[OK] {file} ({n_events} eventos validados, 8 reglas §42.3 OK)")
+
+
 # ----------------------------------------------------------------------
 # Dispatcher
 # ----------------------------------------------------------------------
@@ -395,6 +526,11 @@ SCHEMA_VALIDATORS = {
     "data/items/equipment.json": validate_equipment,
     "data/quests/tutorial_chain.json": validate_tutorial_chain,
     "data/theme/theme_config.json": validate_theme_config,
+}
+
+# Archivos opcionales: validados si existen, skip silencioso si no.
+OPTIONAL_VALIDATORS = {
+    EVENTS_CATALOG_REL: validate_events_catalog,
 }
 
 
@@ -443,11 +579,13 @@ def main():
 
     rep = Report()
 
+    all_validators = {**SCHEMA_VALIDATORS, **OPTIONAL_VALIDATORS}
+
     if args.file:
         target = _resolve_file_arg(args.file)
         rel = _rel(target)
         validator = None
-        for k, v in SCHEMA_VALIDATORS.items():
+        for k, v in all_validators.items():
             if rel == k or rel.endswith("/" + k.split("/")[-1]):
                 validator = v
                 break
@@ -458,6 +596,10 @@ def main():
         print(f"[INFO] validando {len(SCHEMA_VALIDATORS)} archivos declarados")
         for relkey, validator in SCHEMA_VALIDATORS.items():
             validate_path(ROOT / relkey, validator, rep)
+        for relkey, validator in OPTIONAL_VALIDATORS.items():
+            target = ROOT / relkey
+            if target.exists():
+                validate_path(target, validator, rep)
 
     rep.print()
     code = rep.exit_code(strict=args.strict)
