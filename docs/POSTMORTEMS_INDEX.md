@@ -192,6 +192,7 @@ Si la crisis es <1h pero relevante:
 
 | Fecha | Título | Categoría | Tiempo perdido | Sprint | Doc afectado | Archivo |
 |---|---|---|---|---|---|---|
+| 2026-05-08 | Pérdida total de `.git` local — reinit + remote GitHub | Editor/UEFN + AI workflow (operativo) | ~1h (recovery) + historial perdido | RECOVERY-2026-05-08 (pre-SPR-008) | `CHANGELOG.md` + `POSTMORTEMS_INDEX.md` + `WORKFLOW.md` (pendiente — política push remote por sprint/day) | [PM-RECOVERY-2026-05-08.md](postmortems/PM-RECOVERY-2026-05-08.md) |
 | 2026-05-07 | Verse Syntax Drift — 5 archivos no compilaban, docs autoritativos obsoletos | Build/Compile + Documentation | ~3h | SPR-211 (corrige drift de Audit 2 — C1 + Audit 3 — H3.1) | `VERSE_SYNTAX_GUIDE.md` (nuevo) + 8 docs auditados (CHANGELOG, MODULES, GLOSSARY, API_REFERENCE, BOOTSTRAP, CONCEPT, SPRINTS_BACKLOG, PROMPT) + 5 archivos Verse refactoreados + generator script | [PM-SPR-211.md](postmortems/PM-SPR-211.md) |
 
 ### 5.1 Categorías estándar

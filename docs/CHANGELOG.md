@@ -46,6 +46,31 @@
 > **Sección donde se acumulan cambios del sprint en curso.**
 > **Mover a versión correspondiente al cerrar fase.**
 
+### RECOVERY-2026-05-08 — Pérdida de `.git` local + reinit con remote GitHub
+
+> **Contexto**: durante limpieza de archivos temporales PC del 2026-05-07 noche se borró accidentalmente la carpeta `.git` del proyecto. Sin remote/sync/backup. Historial completo + tags SPR-001..SPR-211 perdidos localmente. Working tree (código + docs) intacto al 100%.
+
+#### Added
+- `docs/postmortems/PM-RECOVERY-2026-05-08.md` — postmortem completo del incidente.
+- Remote git `origin` configurado: `https://github.com/lexosi/RPG_Survival.git` (privado).
+- Tag `SPR-211-recovered` — referencia simbólica al perdido `SPR-211` (SHA antiguo era `1c9f801`).
+- Tag `pre-SPR-008` — punto de partida SPR-008 sobre repo nuevo.
+
+#### Changed
+- Política operativa: push remote obligatorio al cerrar cada sprint y cada day. Documentado en `WORKFLOW.md` Fase 4 (pendiente edit en sprint específico).
+
+#### Lost (irrecuperable)
+- Historial completo git (commits desde SPR-001).
+- Tags acumulados: SPR-001..SPR-211 + dailies `day-2026-05-XX-mañana/tarde/final`.
+- Capacidad `git blame` y rollback pre-2026-05-08.
+
+#### Preserved (working tree intacto)
+- Todo código `Content/Verse/**`.
+- Todos docs autoritativos `docs/**`.
+- Todos JSONs `data/**`.
+- Todos Python scripts `scripts/**`.
+- Daily Logs `docs/dailylog/*.md` como narrativa histórica de sprints perdidos.
+
 ### SPR-211 — Verse syntax audit + drift fix (2026-05-07)
 
 > **Contexto**: durante Build Verse Code post-SPR-007 emergieron 13 lecciones críticas de sintaxis Verse moderna que invalidan partes de docs autoritativos del proyecto. Refactor 5 archivos Verse (Logger, TimeSync, 3 Generated) a patrones canónicos modernos. Auditoría 8 docs.
