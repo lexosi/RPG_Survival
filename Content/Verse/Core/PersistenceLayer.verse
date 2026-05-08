@@ -76,9 +76,10 @@ PlayerEconomy<public> := class<final><persistable>:
 var PlayerEconomyMap:weak_map(player, PlayerEconomy) = map{}
 
 # =====================================================================
-# Funciones Load/Save — paso 3c: LoadPlayerCore con Logger.LogWarn.
-# Logger solo se llama cuando una validación detecta corrupción real
-# (no en path normal). Función sigue SIN <transacts> (validado 3b).
+# Funciones Load/Save — paso 3d: SavePlayerCore añadido.
+# Save tiene <transacts> (escribe weak_map). NO puede usar Logger
+# (effect 'no_rollback' interno incompatible con <transacts>) — Save
+# es silencioso. Validación va en Load (PERSISTENCE_MAP §10), no en Save.
 # =====================================================================
 
 LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
@@ -105,3 +106,6 @@ LoadPlayerCore<public>(InPlayer:player):PlayerCore_V1=
         Logger.LogWarn("PersistenceLayer", "PlayerCore.XP negativo, corrigiendo a 0")
         set SafeXP = 0
     PlayerCore_V1{Gold := SafeGold, Level := SafeLevel, XP := SafeXP}
+
+SavePlayerCore<public>(InPlayer:player, Data:PlayerCore_V1)<transacts>:void=
+    if (set PlayerCoreMap[InPlayer] = PlayerCore{V1 := option{Data}}) {}
