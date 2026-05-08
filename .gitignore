@@ -1,0 +1,41 @@
+.aider*
+# UEFN auto-generated
+Saved/
+Intermediate/
+/Build/
+DerivedDataCache/
+.vs/
+*.user
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+secrets.json
+
+# Daily log: nickname local (no se trackea, se crea al primer arranque del script)
+.dailylog_user
+
+# Python
+__pycache__/
+*.pyc
+
+!.gitkeep
+
+# UEFN Revision Control (local cache)
+.urc/
+
+# ==== Throwaway verifier scripts (SPR-209) ====
+# Carpeta para scripts de verificación one-shot, NO commitear el contenido.
+# Excepción: .gitkeep para que git trackee la carpeta.
+scripts/tools/_throwaway/*
+!scripts/tools/_throwaway/.gitkeep

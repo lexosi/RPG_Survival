@@ -1,0 +1,27 @@
+{
+  "_schema_version": 1,
+  "_doc": "Configuracion tematica del mapa. Cambiar active_theme altera el mapa entero. Ver SYS-046. Archivo: data/theme/theme_config.json",
+  "_validation": "scripts/build/01_validate_jsons.py debe pasar antes de commit.",
+  "active_theme": "default",
+  "themes": {
+    "default": {
+      "display_name_key": "theme.default.name",
+      "hub_mesh_path": "Content/Assets/Meshes/Hub/DefaultHub.fbx",
+      "skybox_material_path": "Content/Assets/Materials/Skybox_Default.uasset",
+      "ambient_track_key": "ambient.default",
+      "color_palette_overrides": {
+        "Primary": "#3B82F6"
+      },
+      "_comment_asset_swap_rules": "Reglas para reemplazo masivo de assets entre themes.",
+      "asset_swap_rules": [
+        {
+          "pattern": "Content/Assets/Trees/Grass_Default/*.fbx",
+          "replacement_folder": "Content/Assets/Trees/Grass_Medieval/"
+        }
+      ],
+      "exclusive_companions": [1],
+      "_comment_exclusive_companions": "IDs de companions de este theme (opcional).",
+      "exclusive_items": [10001]
+    }
+  }
+}

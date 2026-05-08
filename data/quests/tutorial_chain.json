@@ -1,0 +1,43 @@
+{
+  "_schema_version": 1,
+  "_doc": "Cadena tutorial del primer minuto. 15 quests en total. Ver SYS-065. Archivo: data/quests/tutorial_chain.json",
+  "_validation": "scripts/build/01_validate_jsons.py debe pasar antes de commit.",
+  "tutorial_quests": [
+    {
+      "_comment_id": "ID unico globalmente entre TODAS las quests.",
+      "id": 1,
+      "name": "TUTORIAL_WELCOME",
+      "display_name_key": "quest.tutorial_welcome.name",
+      "description_key": "quest.tutorial_welcome.description",
+      "category": "tutorial",
+      "prerequisites": [],
+      "_comment_objective": "type enum: gather,kill,craft,level_up,collect_companion,complete_zone,spend_gold,spend_gems,login,time_played,custom. target_id opcional segun type.",
+      "objective": {
+        "type": "gather",
+        "target_id": 1,
+        "amount": 5
+      },
+      "_comment_rewards": "Lista de recompensas. Campos requeridos: reward_type y amount.",
+      "rewards": [
+        {
+          "reward_type": "gold",
+          "amount": 100
+        },
+        {
+          "reward_type": "xp",
+          "amount": 50
+        }
+      ],
+      "time_limit_seconds": 0,
+      "repeatable": false,
+      "reset_period": "none",
+      "required_level": 1,
+      "required_base_level": 1,
+      "_comment_contextual": "target_id=1 es un placeholder; debera apuntar a un resource/item valido al completar futuros SPR."
+    }
+  ],
+  "config": {
+    "skippable_for_admins": true,
+    "completion_unlocks_first_rebirth": true
+  }
+}

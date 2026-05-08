@@ -1,0 +1,35 @@
+{
+  "_schema_version": 1,
+  "_doc": "Definicion de equipamiento. Ver CONCEPT.md SYS-024. Archivo: data/items/equipment.json",
+  "_validation": "scripts/build/01_validate_jsons.py debe pasar antes de commit.",
+  "equipment": [
+    {
+      "_comment_id": "ID unico en rango 10000..99999.",
+      "id": 10001,
+      "name": "DRAGON_RING",
+      "display_name_key": "equipment.dragon_ring.name",
+      "description_key": "equipment.dragon_ring.description",
+      "slot": "ring",
+      "_comment_rarity": "1=Common..8=Admin",
+      "rarity": 5,
+      "base_stats": {
+        "_comment_base_stats": "Todos los campos son OPTIONAL. Al menos un stat >0.",
+        "hp": 20,
+        "atk": 5,
+        "def": 3,
+        "speed": 0,
+        "intelligence": 0,
+        "luck": 0,
+        "crit_chance": 0.1,
+        "crit_damage": 0.5
+      },
+      "_comment_set_id": "opcional. referencia a sets.json.",
+      "set_id": 1,
+      "obtainable_from": {
+        "lootbox_premium": { "drop_rate": 0.1 }
+      },
+      "tradable": true,
+      "icon_path": "Content/Assets/Icons/Equipment/dragon_ring.png"
+    }
+  ]
+}

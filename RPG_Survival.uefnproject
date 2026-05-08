@@ -1,0 +1,68 @@
+{
+	"fileVersion": 15,
+	"title": "RPG_Survival",
+	"description": "",
+	"keyArt": "",
+	"docsUrl": "",
+	"apiAccess": "Private",
+	"compatibilityVersion": "40.30",
+	"requiredRedirectorStartingVersion": "40.30.53276632",
+	"editorPermissions": [],
+	"epicApp": "",
+	"sortPriority": 0,
+	"featureSet": "",
+	"plugins": [
+		{
+			"name": "RPG_Survival",
+			"bIsRoot": true,
+			"bIsPublic": false
+		}
+	],
+	"dataSets":
+	{
+		"matchmaking":
+		{
+			"maxPlayers": 16,
+			"maxTeamCount": 16,
+			"maxTeamSize": 16,
+			"maxSocialPartySize": 16,
+			"allowJoinInProgress": true,
+			"allowSquadFillOption": false,
+			"islandQueuePrivacy": "Unrestricted",
+			"minPlayers": 1,
+			"overtimePlayerTarget": 1,
+			"queueMainDuration": 5,
+			"queueOvertimeDuration": 5,
+			"useSkillBasedMatchmaking": false,
+			"ratingType": "",
+			"version": 1
+		},
+		"experimental":
+		{
+			"sceneGraph":
+			{
+				"bIsSceneGraphSystemAllowed": true,
+				"bEnableOneFilePerEntity": false
+			},
+			"personaDevice":
+			{
+				"bEnablePersonaDevice": false
+			},
+			"version": 1,
+			"pythonExperimental":
+			{
+				"bEnablePythonForProject": true
+			}
+		}
+	},
+	"bindings":
+	{
+		"projectId": "4858f836-42f4-499b-dcc1-76b260cc5043",
+		"modules":
+		{
+			"RPG_Survival": "e8bafe4a-41db-8c21-70c4-60be0b2e64cc"
+		},
+		"bSuppressAutomaticVersePathAssignment": false,
+		"projectVersePath": "/lexosi@fortnite.com/RPG_Survival"
+	}
+}

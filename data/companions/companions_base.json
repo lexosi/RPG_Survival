@@ -1,0 +1,38 @@
+{
+  "_schema_version": 1,
+  "_doc": "Definiciones de companions base. Ver CONCEPT.md SYS-010. Archivo: data/companions/companions_base.json",
+  "_validation": "scripts/build/01_validate_jsons.py debe pasar antes de commit.",
+  "companions": [
+    {
+      "_comment_id": "ID unico inmutable. Rango 1..9999.",
+      "id": 1,
+      "name": "DRAGON_FIRE",
+      "display_name_key": "companion.dragon_fire.name",
+      "description_key": "companion.dragon_fire.description",
+      "_comment_rarity": "1=Common,2=Uncommon,3=Rare,4=Epic,5=Legendary,6=Mythic,7=Secret,8=Admin",
+      "rarity": 5,
+      "base_hp": 100,
+      "base_atk": 25,
+      "base_def": 15,
+      "base_speed": 12,
+      "category": "combat",
+      "_comment_obtainable_from": "Al menos una fuente REQUIRED. Cada fuente es opcional pero alguna debe existir.",
+      "obtainable_from": {
+        "lootbox_premium": { "drop_rate": 0.05 },
+        "boss_drops": ["FOREST_DRAGON_BOSS"],
+        "events": ["FIRE_FESTIVAL_2026"],
+        "battle_pass": { "season": 1, "level": 50, "premium": true }
+      },
+      "mesh_path": "Content/Assets/Meshes/Companions/dragon_fire.fbx",
+      "icon_path": "Content/Assets/Icons/Companions/dragon_fire.png",
+      "_comment_tradable": "Si vbucks_only=true entonces DEBE ser false (regla JSON_SCHEMAS §3.2).",
+      "tradable": true,
+      "_comment_evolution": "IDs de otros companions a los que puede evolucionar (opcional).",
+      "evolution_chain": [101, 102],
+      "_comment_passive_bonus": "Bonus pasivo mientras esta activo; estructura libre.",
+      "passive_bonus": {
+        "hp_bonus": 50
+      }
+    }
+  ]
+}
