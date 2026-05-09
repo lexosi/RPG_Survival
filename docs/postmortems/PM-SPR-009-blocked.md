@@ -1,6 +1,8 @@
 # POSTMORTEM — 2026-05-09 — SPR-009 EventBus blocked (patrón canónico inviable en Verse moderno)
 
-> ⚠️ **Postmortem en 2 fases.** Esta es **fase 1**: hallazgo, causa raíz, bloqueo registrado, hipótesis fallidas y resolución temporal. La **fase 2** (patrón final + edición de docs autoritativos) se redacta tras `F-B-investigación` cuando se decida el patrón sustituto. Las secciones "Cambios necesarios a docs" y partes de "Cómo prevenirlo" quedan como pendientes [ ] hasta entonces.
+> **Status: 🟢 Resolved** — fase 1 (incidente) + fase 2 (resolución) ambas cerradas. Cierre F-C-5 = 2026-05-09 noche. Patrón canónico vigente: H4 (`event_bus_device := class<concrete>(creative_device)` + `@editable Bus:event_bus_device`). Decisión D-A11 (excepción a D-A7).
+>
+> **Postmortem en 2 fases.** **Fase 1** (hallazgo, causa raíz, bloqueo registrado, hipótesis fallidas, resolución temporal): redactada 2026-05-09 mañana. **Fase 2** (patrón final H4 + 8 commits refactor docs F-C-4 + lecciones de proceso): redactada 2026-05-09 noche tras F-B-investigación + F-C-2 implementación + F-C-3 tests + F-C-4 refactor 12 docs autoritativos.
 
 ## 📋 Resumen ejecutivo (TL;DR)
 
@@ -104,11 +106,11 @@ FASE 2 (F-B-investigación + decisión patrón final + edición docs autoritativ
 - [x] Commit del bloqueo + tag rollback granular (`SPR-009-blocked-2026-05-09`) — permite restaurar estado preciso si futuro replanteo necesita.
 - [x] Stub `export_event_bus()` con etiqueta `SPR-009-BLOCKED` clara para que cualquier consumidor del exporter detecte el estado.
 - [x] EventPayloads preservado (estructura de datos válida, reusable bajo cualquier patrón final).
-- [ ] Marcar BOOTSTRAP_PIPELINE.md §11.5 con banner ⚠️ "OBSOLETA post-SPR-009-blocked, ver patrón nuevo TBD post-F-B" — **pendiente F-B fase 2**.
-- [ ] Marcar API_REFERENCE_GENERATED.md §3.5 con warning sobre patrón inviable — **pendiente F-B fase 2**.
-- [ ] Marcar MODULES_DEPENDENCY_GRAPH.md §4.2 + §11.2 con warning idem — **pendiente F-B fase 2**.
-- [ ] CHANGELOG.md D-A8 entry "parcialmente revisada" — **pendiente F-B fase 2**.
-- [ ] VERSE_SYNTAX_GUIDE.md §1 lección 11 ampliada (caso explícito event(t){} top-level propaga transacts) o lección 16 nueva — **pendiente F-B fase 2 con plantilla validada**.
+- [x] Marcar BOOTSTRAP_PIPELINE.md §11.5 con banner ⚠️ "OBSOLETA post-SPR-009-blocked, ver patrón nuevo TBD post-F-B" — **resuelto F-C-4-L1a**: §11.5-§11.8 reescrito al patrón H4 (`event_bus_device := class<concrete>(creative_device)`) + warning ⚠️ explicativo en §11.5 cabecera. Banner obsolescencia innecesario tras refactor.
+- [x] Marcar API_REFERENCE_GENERATED.md §3.5 con warning sobre patrón inviable — **resuelto F-C-4-L1b**: §3.5 reescrito completo con patrón device + sección "Funciones que NO existen" expandida (`.Subscribe`/`.Unsubscribe` documentados como inexistentes).
+- [x] Marcar MODULES_DEPENDENCY_GRAPH.md §4.2 + §11.2 con warning idem — **resuelto F-C-4-L3 + L3-bonus**: §4.2 arquitectura device + §11.2 tabla `Bus.<Evento>` + §2.1 nota concrete excluyendo EventBus + cabecera doc actualizada.
+- [x] CHANGELOG.md D-A8 entry "parcialmente revisada" — **resuelto F-C-4-L2**: nota retroactiva D-A8 añadida + nueva sección "Auditoría regresión bloque 5 — H4" + decisión D-A11 (excepción D-A7).
+- [x] VERSE_SYNTAX_GUIDE.md §1 lección 11 ampliada (caso explícito event(t){} top-level propaga transacts) o lección 16 nueva — **resuelto F-C-4-L1b**: lección 16 nueva (`event(t){}` top-level falla 3512) + 4 sub-corolarios A-D (`event(t)` no subscribable / spawn+Await loop / Sleep(0.0) race fix / Signal síncrono) + 2 filas tabla anti-patrones §3 + contador 13→16.
 
 ### Acciones sistémicas (a aplicar tras F-B fase 2)
 
@@ -116,20 +118,112 @@ FASE 2 (F-B-investigación + decisión patrón final + edición docs autoritativ
 - [ ] **Test devices mínimos por patrón Verse arquitectónico nuevo** (~30 LOC) que validen sintaxis antes de transcribir a docs.
 - [ ] **Proceso para "info de fuentes externas relevantes"** (foros Epic, tutoriales oficiales, ejemplos comunidad) que NO está en VERSE_SYNTAX_GUIDE — falta canal sistemático para incorporarla.
 
+## ✅ Resolución final (2026-05-09 tarde-noche)
+
+### Cronología completa
+
+| Fase | Fecha | Acción | Resultado |
+|---|---|---|---|
+| **F-A** | 2026-05-09 mañana | Iteración fix1+fix2 sobre patrón canónico v0 (BOOTSTRAP §11.5 v0 + API §3.5 v0) | Bloqueado — err 3512 al instanciar `event(t){}` top-level. ~2.5h perdidas. PM fase 1 escrito. |
+| **F-A-rollback** | 2026-05-09 tarde | Rollback a HEAD pre-SPR-009 + crear `Tests/test_event_bus_smoke.verse` placeholder | Repo limpio. |
+| **F-B** | 2026-05-09 tarde | Investigación 5 hipótesis H1-H5 contra Verse moderno + `Verse.digest` + experimentos UEFN aislados | H1-H3 fail (descartadas). H5 viable solo con device parent → cristaliza H4. |
+| **F-B-conclusión** | 2026-05-09 tarde | H4 = `event_bus_device := class<concrete>(creative_device):` instanciado en Main.umap, accedido vía `@editable Bus:event_bus_device` | Patrón canónico vigente. |
+| **F-C-1** | 2026-05-09 tarde | Diseño post-H4 + decisión D-A11 (excepción a D-A7 — solo EventBus es device) | D-A11 documentada CHANGELOG. |
+| **F-C-2** | 2026-05-09 tarde | Implementación `Generated/EventBusDevice.verse` + Main.umap actor + smoke runtime | Smoke test PASS in-session UEFN. Hash idempotencia EventBusDevice.verse: `A744E97185F1E913B0CFB33BA93CF181D236B793919C261E7DD0B56711B664A6`. |
+| **F-C-3a** | 2026-05-09 tarde | Smoke runtime UEFN — `Tests/test_event_bus_smoke.verse` PASS con patrón `spawn{} + Sleep(0.0) + loop{Await()}` | Hash test_event_bus_smoke.verse: `61A441F77FEEE8C5C9649B572D9690B2070C2CCD028D398DBB1150D1E39B8224`. Lección 16 (`event(t)` no subscribable) emergió aquí. |
+| **F-C-3b** | 2026-05-09 tarde | Golden contract Python — `scripts/build/tests/test_exporter_event_bus.py` (5 tests + fixture `event_bus_expected_contract.json` + idempotencia) | 5/5 PASS. Runtime ~0.13s. Sin deps externas. Patrón canónico TESTING_PROTOCOL §10 introducido. |
+| **F-C-3c** | 2026-05-09 tarde | Anomalías capturadas: lista 6 Cores con excepción EventBus, plantilla Integration test obsoleta, gap §10 Python tests en plantilla "Crear test_device" | Capturado en handoff F-C-4. |
+| **F-C-4** | 2026-05-09 tarde-noche | Refactor docs masivo — 7 sub-lotes (L1a + L1b + L1c + L2 + L3 + L4 + L5 + L3-bonus), 8 commits, 12 docs autoritativos modificados | Todo PASS, todo pusheado. HEAD master post-F-C-4. |
+| **F-C-5** | 2026-05-09 noche | Postmortem fase 2 (este patch) | Pendiente cierre. |
+| **F-C-6** | 2026-05-09 noche | Daily Log + commit cierre + tag `SPR-009-resolved` | Pendiente. |
+
+### Patrón canónico vigente (post-H4)
+
+```verse
+# Content/Verse/Generated/EventBusDevice.verse (generado por SPR-004 ext)
+
+using { /Fortnite.com/Devices }
+using { /Verse.org/Simulation }
+
+event_bus_device<public> := class<concrete>(creative_device):
+
+    LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+    PlayerStatsChanged<public>:event(player_stats_changed_payload) = event(player_stats_changed_payload){}
+    # ... una propiedad event(t) por evento del catálogo ...
+
+    OnBegin<override>()<suspends>:void=
+        # Device alive cuando UEFN instancia el actor del nivel.
+        # Sin lógica adicional aquí — solo expone los event(t) builtin.
+        Print("[EventBusDevice] Online")
+```
+
+### Patrón emisor canónico
+
+```verse
+# Cualquier device emisor (e.g., PlayerProgression dentro de un creative_device wrapper)
+
+@editable Bus:event_bus_device = event_bus_device{}
+
+OnLevelUpDetected(Player:player, Old:int, New:int):void=
+    Payload := level_up_payload{ Player := Player, OldLevel := Old, NewLevel := New }
+    Bus.LevelUp.Signal(Payload)  # Síncrono — handlers Await resumen aquí dentro
+```
+
+### Patrón consumer canónico
+
+```verse
+# Cualquier device consumer (e.g., HUDController dentro de creative_device wrapper)
+
+@editable Bus:event_bus_device = event_bus_device{}
+
+OnBegin<override>()<suspends>:void=
+    spawn { ListenLevelUps() }
+    Sleep(0.0)  # OBLIGATORIO — cede control al scheduler para que spawned task entre en Await
+                # ANTES del primer Signal. Sin él: race silenciosa.
+
+ListenLevelUps()<suspends>:void=
+    loop:
+        Payload := Bus.LevelUp.Await()
+        Print("[HUD] Level up: {Payload.OldLevel} -> {Payload.NewLevel}")
+```
+
+### Decisión arquitectónica D-A11
+
+**EventBus es excepción a D-A7**. Los 5 Cores restantes (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry siguen siendo singletons top-level. Solo EventBus migra a `creative_device` instanciado en Main.umap. Razón: `event(t){}` top-level falla con err 3512 (mismo patrón que lección 11 — structs literal top-level dentro de module). Detalle CHANGELOG sección "Auditoría regresión bloque 5".
+
+### Refs commits
+
+8 commits F-C-4 (todos en master, pusheados):
+
+1. `acfecb0` — F-C-4-L1a BOOTSTRAP §11 post-H4
+2. (SHA — humano busca) — F-C-4-L1b API_REFERENCE §3.5 + VERSE_SYNTAX_GUIDE lección 16
+3. (SHA — humano busca) — F-C-4-L1c BOOTSTRAP cleanup residual
+4. (SHA — humano busca) — F-C-4-L2 CHANGELOG D-A11 + GLOSSARY EventBus
+5. (SHA — humano busca) — F-C-4-L3 SPRINTS_BACKLOG SPR-009 + CONCEPT done + MODULES §4.2/§2.1/§11.2
+6. (SHA — humano busca) — F-C-4-L4 TESTING_PROTOCOL §2.1/§2.3 + PROMPT_TEMPLATES §12
+7. (SHA — humano busca) — F-C-4-L5 FOLDER_STRUCTURE_TRUTH regex+naming + JSON_SCHEMAS §42
+8. (SHA — humano busca) — F-C-4-L3-bonus drift residual MODULES (Bus.<Evento> + excepción D-A11 §2.1)
+
+Para SHAs reales: `git log --oneline --grep="F-C-4"` post-cierre F-C-6.
+
 ## 📝 Cambios necesarios a docs
 
-> Lista pendiente — completar tras F-B fase 2 con docs concretos a editar y patrón final decidido.
+> Lista cerrada por F-C-4 (8 commits / 12 docs autoritativos). Todos los items marcados [x] tras refactor masivo.
 
-- [ ] `BOOTSTRAP_PIPELINE.md` §11.5 — banner ⚠️ obsoleto + patrón nuevo (TBD)
-- [ ] `BOOTSTRAP_PIPELINE.md` §11.6 — transformer Python actualizado al patrón nuevo
-- [ ] `API_REFERENCE_GENERATED.md` §3.5 — actualizar firmas tras patrón nuevo
-- [ ] `MODULES_DEPENDENCY_GRAPH.md` §4.2 — actualizar arquitectura EventBus
-- [ ] `MODULES_DEPENDENCY_GRAPH.md` §11.2 — actualizar lista de eventos según API nueva
-- [ ] `CHANGELOG.md` — entry D-A8 "parcialmente revisada" + entry SPR-009-blocked + entry patrón nuevo
-- [ ] `VERSE_SYNTAX_GUIDE.md` §1 — lección 11 ampliada O lección 16 nueva (event(t){} top-level)
-- [ ] `SPRINTS_BACKLOG.md` — SPR-009 re-spec con patrón nuevo, deps recalibradas
-- [ ] `CONCEPT.md` — SPR-009 done criteria reescrito
-- [ ] `JSON_SCHEMAS.md` §42 — verificar si patrón nuevo cambia algo en el schema del catalog
+- [x] `BOOTSTRAP_PIPELINE.md` §11.5 — patrón nuevo (H4 device) — **F-C-4-L1a**
+- [x] `BOOTSTRAP_PIPELINE.md` §11.6 — transformer Python actualizado al patrón nuevo — **F-C-4-L1a**
+- [x] `API_REFERENCE_GENERATED.md` §3.5 — actualizar firmas tras patrón nuevo — **F-C-4-L1b**
+- [x] `MODULES_DEPENDENCY_GRAPH.md` §4.2 — actualizar arquitectura EventBus — **F-C-4-L3**
+- [x] `MODULES_DEPENDENCY_GRAPH.md` §11.2 — actualizar lista de eventos según API nueva — **F-C-4-L3 + L3-bonus** (tabla columna `Bus.<Evento>` + convención + prosa cabecera)
+- [x] `CHANGELOG.md` — entry D-A8 "parcialmente revisada" + entry patrón nuevo — **F-C-4-L2** (nota retroactiva D-A8 + sección "Auditoría regresión bloque 5" + D-A11)
+- [x] `VERSE_SYNTAX_GUIDE.md` §1 — lección 16 nueva (`event(t){}` top-level) + 4 sub-corolarios — **F-C-4-L1b**
+- [x] `SPRINTS_BACKLOG.md` — SPR-009 re-spec con patrón nuevo, deps recalibradas — **F-C-4-L3** (fila SPR-009 🟢 done + bullet Notas C1+C3 actualizado)
+- [x] `CONCEPT.md` — SPR-009 done criteria reescrito — **F-C-4-L3** (bloque §13.3 reescrito con done [x])
+- [x] `JSON_SCHEMAS.md` §42 — verificar si patrón nuevo cambia algo en el schema del catalog — **F-C-4-L5** (catalog inmutable; solo prosa cabecera + fila §42.2 `event_bus_device` actualizadas)
+- [x] `GLOSSARY.md` — entradas EventBus + event(t) reescritas + nueva entrada "Await loop pattern" — **F-C-4-L2**
+- [x] `TESTING_PROTOCOL.md` §2.1 (excepción D-A11) + §2.3 (plantilla Integration Await loop) — **F-C-4-L4**
+- [x] `PROMPT_TEMPLATES.md` §12 (mención §10 Python tests + Done criteria adicional) — **F-C-4-L4**
+- [x] `FOLDER_STRUCTURE_TRUTH.md` §1.1 tabla + nota + §4 árbol + §8.2 regex (`EventBusConstants` → `EventBusDevice`) — **F-C-4-L5**
 
 ## 🧠 Lecciones aprendidas
 
@@ -139,6 +233,28 @@ FASE 2 (F-B-investigación + decisión patrón final + edición docs autoritativ
 4. **Investigación previa Epic + foro confirmaba el problema** — pero esa info no estaba en VERSE_SYNTAX_GUIDE. Falta proceso para "info de fuentes externas relevantes que NO está en el guide" — tutoriales Epic, foros, ejemplos comunidad oficial.
 5. **Tagear el estado bloqueado** (`SPR-009-blocked-2026-05-09`) + tag intermedio (`SPR-009-step3.5-fix1`) habilita rollback granular limpio. Política `tag pre-<SPR>` ya practicada da frutos cuando un sprint se bloquea a mitad.
 6. **Trabajo bueno se preserva selectivamente**. Catalog JSON + validador + payloads son útiles bajo cualquier patrón final. Solo `export_event_bus()` y `EventBusConstants.verse` necesitan re-trabajo. Diferenciar "bloqueado" de "perdido" reduce coste de re-spec.
+
+### Lecciones aprendidas — fase 2 (resolución)
+
+#### Lecciones técnicas
+
+| # | Lección | Documentada en |
+|---|---|---|
+| L1 | `event(t)` builtin Verse v1 = `class(signalable(t), awaitable(t))`. **NO implementa `subscribable`**. NO `.Subscribe()` ni `.Unsubscribe()`. | `VERSE_SYNTAX_GUIDE.md` §1 lección 16 sub-corolario A |
+| L2 | `event(t){}` top-level dentro module/file scope falla con err 3512 (mismo patrón que lección 11 — structs literal top-level). | `VERSE_SYNTAX_GUIDE.md` §1 lección 16 |
+| L3 | Patrón consumer canónico: `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn + `ListenerFn()<suspends>:void= loop { Payload := Bus.<Evento>.Await() ; handler(Payload) }`. `Sleep(0.0)` post-spawn **obligatorio** (race fix Signal-antes-de-Await). | `VERSE_SYNTAX_GUIDE.md` §1 lección 16 sub-corolarios B + C |
+| L4 | `Signal()` síncrono en Verse v1 — handlers Await resumen dentro de Signal antes de retornar al emisor. | `VERSE_SYNTAX_GUIDE.md` §1 lección 16 sub-corolario D |
+| L5 | Tests Python complementan smoke devices Verse — golden contract para validadores/exporters/transformers en `scripts/build/`. Patrón canónico introducido SPR-009 F-C-3b: 5 tests cubriendo class declaration + count + contrato per-event + drift positivo + idempotencia. | `TESTING_PROTOCOL.md` §10 |
+| L6 | Decisión arquitectónica D-A11: EventBus es excepción a D-A7. Solo EventBus migra a `creative_device` — los otros 5 Cores + Registry siguen siendo singletons top-level. | `CHANGELOG.md` sección "Auditoría regresión bloque 5" |
+
+#### Lecciones de proceso
+
+| # | Lección | Aplicación futura |
+|---|---|---|
+| P1 | Cuando un patrón canónico documentado falla en build real, **NO asumir que el patrón es correcto y el build erróneo** — investigar causa raíz contra `Verse.digest` + experimentos aislados. F-A perdió ~2.5h asumiendo el patrón v0 era válido. | Antes de iterar fix1+fix2 sobre un patrón canónico que falla, validar primero el patrón aislado en archivo throwaway. Si falla aislado, F-B (investigación) ANTES de F-A (intentar arreglar). |
+| P2 | Refactor docs masivo (>10 docs) tras un cambio arquitectónico crítico → trocear en lotes pequeños (~250 líneas prompt CC, scope limitado por doc), **NO un solo prompt monolítico**. F-C-4 = 8 commits / 12 docs sin un solo error de localización. | Lotes ≤5 docs / lote. Cada lote con scope claro y validación PowerShell explícita. Lotes secuenciales (no paralelos) cuando hay cross-refs entre lotes. |
+| P3 | Capturar drift residual durante ejecución de un lote (cuando CC reporta hallazgos fuera del scope original) — NO corregir en el momento, sino acumular para mini-lote bonus al final. F-C-4 capturó 2 drift en L3 → cerrados limpio en L3-bonus tras L5. | Procedimiento estándar: cada lote reporta "Drift residual capturado", se decide post-lote si va a mini-lote bonus o si el siguiente lote lo absorbe. |
+| P4 | Hashes SHA-256 de archivos críticos (EventBusDevice.verse + test_event_bus_smoke.verse) registrados como anchors de idempotencia. Útil para verificar que regeneración futura del exporter produce bit-exact output. | Documentar hashes en cada cierre de SPR para artefactos generados críticos. |
 
 ## 🔗 Referencias
 
