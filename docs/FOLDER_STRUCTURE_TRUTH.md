@@ -30,13 +30,13 @@
 | JSON | `snake_case.json` | `companions_base.json` |
 | Carpetas Verse | `PascalCase` | `Core/`, `Systems/Player/` |
 | Verse runtime | `PascalCase.verse` | `PlayerStats.verse` |
-| Verse generado | `*_Generated.verse` (regla general) + 2 excepciones arquitectónicas: `ModuleRegistryConstants.verse` (C1) y `EventBusConstants.verse` (C3) | `Companions_Generated.verse`, `ModuleRegistryConstants.verse` |
+| Verse generado | `*_Generated.verse` (regla general) + 2 excepciones arquitectónicas: `ModuleRegistryConstants.verse` (C1) y `EventBusDevice.verse` (C3 + H4) | `Companions_Generated.verse`, `ModuleRegistryConstants.verse`, `EventBusDevice.verse` |
 | Python | `NN_snake_case.py` (build) o `snake_case.py` (tools) | `01_validate_jsons.py`, `texture_audit.py` |
 | Markdown | `SCREAMING_SNAKE.md` | `CONCEPT.md`, `SYSTEMS_INDEX.md` |
 | Devices | `PascalCase.verse` | `BasePlot.verse` |
 | Daily logs | `DL_YYYY-MM-DD_SPR-<tokens>_<autor>.md` (regex `^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$`) | `DL_2026-05-06_SPR-001+FIX1_lexosi.md`, `DL_2026-05-06_SPR-001+FIX1+002_lexosi.md` |
 
-> **Nota sobre excepciones de Verse generado (Auditoría 3 — H3.6)**: la lista de excepciones canónicas son ÚNICAMENTE `ModuleRegistryConstants.verse` y `EventBusConstants.verse` (decisión D-A10, Auditoría 2 — C1+C3). Verdad operativa en la regex de §8.2 línea 522. Coherente con `BOOTSTRAP_PIPELINE.md` §4.4. Cualquier otro archivo en `Generated/` DEBE llevar sufijo `_Generated`.
+> **Nota sobre excepciones de Verse generado (Auditoría 3 — H3.6 + Auditoría regresión bloque 5 — H4 SPR-009)**: la lista de excepciones canónicas son ÚNICAMENTE `ModuleRegistryConstants.verse` y `EventBusDevice.verse` (decisiones D-A10 + D-A11, Auditoría 2 — C1+C3 + Auditoría regresión bloque 5 — H4). El nombre anterior `EventBusConstants.verse` queda obsoleto post-F-C-2 SPR-009 — el archivo se renombró a `EventBusDevice.verse` reflejando que el patrón vigente es `event_bus_device := class<concrete>(creative_device)` (no singleton top-level con `event_bus_module`). Verdad operativa en la regex de §8.2 línea 522. Coherente con `BOOTSTRAP_PIPELINE.md` §4.4 + `VERSE_SYNTAX_GUIDE.md` §1 lección 16. Cualquier otro archivo en `Generated/` DEBE llevar sufijo `_Generated`.
 
 ### 1.2 Reglas de path
 
@@ -252,7 +252,7 @@ Content/Verse/
 │   ├── Quests_Generated.verse               ← from data/quests/
 │   ├── ThemeConstants_Generated.verse       ← from data/theme/
 │   ├── ModuleRegistryConstants.verse        ← from data/architecture/modules_manifest.json (Auditoría 2 — C1; SPR-005 + SPR-004 ext)
-│   ├── EventBusConstants.verse              ← from data/architecture/events_catalog.json (Auditoría 2 — C3; SPR-009 + SPR-004 ext)
+│   ├── EventBusDevice.verse                 ← from data/architecture/events_catalog.json (Auditoría 2 — C3 + H4 post-F-C-2; SPR-009 + SPR-004 ext)
 │   ├── EventPayloads_Generated.verse        ← from data/architecture/events_catalog.json (Auditoría 2 — C3; SPR-009 + SPR-004 ext)
 │   ├── BalanceCurves_Generated.verse        ← from BALANCE_FORMULAS.md (SPR-134)
 │   ├── PlayerStats_Generated.verse          ← from data/progression/player_stats_base.json
@@ -548,7 +548,7 @@ TRUTH = ROOT / "docs" / "FOLDER_STRUCTURE_TRUTH.md"
 NAMING_RULES = {
     "data": re.compile(r"^[a-z][a-z0-9_]*\.json$"),
     "Verse": re.compile(r"^[A-Z][A-Za-z0-9]*\.verse$"),
-    "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusConstants\.verse$"),
+    "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusDevice\.verse$"),
     "scripts_build": re.compile(r"^\d{2}_[a-z][a-z0-9_]*\.py$"),
     "docs": re.compile(r"^[A-Z][A-Z0-9_]*\.md$|^README\.md$"),
 }

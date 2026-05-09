@@ -1778,7 +1778,7 @@ RateLimitDef := {
 
 ## 42. Schema: events_catalog.json
 
-> **Decisión cerrada (Auditoría 2 — C3)**: catálogo declarativo de eventos cross-system del proyecto. Source of truth del EventBus tipado. Genera `Generated/EventPayloads_Generated.verse` (structs de payloads) y `Generated/EventBusConstants.verse` (instancias `event(t)` tipadas en el módulo `event_bus_module`). Detalle de la generación en `BOOTSTRAP_PIPELINE.md` §11.
+> **Decisión cerrada (Auditoría 2 — C3 + Auditoría regresión bloque 5 — H4)**: catálogo declarativo de eventos cross-system del proyecto. Source of truth del EventBus tipado. Genera `Generated/EventPayloads_Generated.verse` (structs de payloads) y `Generated/EventBusDevice.verse` (`event_bus_device := class<concrete>(creative_device)` con propiedades `event(t)` tipadas — patrón H4 post-F-C-2 SPR-009, NO singleton top-level). Detalle de la generación en `BOOTSTRAP_PIPELINE.md` §11. **Catalog JSON inmutable post-H4**: el schema (id, verse_struct_name, verse_event_name, emitters, subscribers, payload_fields) sigue válido — solo cambió el archivo Verse generado y su patrón de instanciación. Decisión D-A11 en `CHANGELOG.md`.
 
 **Path**: `data/architecture/events_catalog.json`
 
@@ -1829,7 +1829,7 @@ RateLimitDef := {
 |---|---|---|
 | `id` | string | snake_case único, inmutable. Identificador conceptual del evento. |
 | `verse_struct_name` | string | snake_case + `_payload`. Nombre del struct Verse generado. Debe ser único en todo el proyecto. |
-| `verse_event_name` | string | PascalCase. Nombre de la propiedad en `event_bus_module`. Único en el bus. |
+| `verse_event_name` | string | PascalCase. Nombre de la propiedad en `event_bus_device` (post-H4 SPR-009; antes `event_bus_module` pre-H4). Único en el bus. |
 | `emitters` | string[] | Lista de Systems que emiten. Validador comprueba que existan en el manifest de módulos. |
 | `subscribers` | string[] | Lista de Systems que se suscriben. Solo informativo (Verse no impone restricción). |
 | `payload_fields` | object[] | Mínimo 1 campo. Si el evento es "fire-and-forget puro" → 1 campo dummy `Timestamp:int`. |
