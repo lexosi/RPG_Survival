@@ -553,6 +553,66 @@ Tras corregir la sintaxis `weak_map[player]struct<persistable>` → `weak_map(pl
 
 ---
 
+## 🔧 SPR-009 — EventBus resolved (2026-05-09 noche, cierre F-C-6)
+
+> **Cierre completo SPR-009** tras recorrido F-A bloqueado → F-B investigación 5 hipótesis H1-H5 → F-C resolución con patrón H4 (`event_bus_device` creative_device) → F-C-4 refactor docs masivo (12 docs autoritativos, 8 commits) → F-C-5 PM fase 2 → F-C-6 cierre.
+
+### Done
+- [x] `Content/Verse/Generated/EventBusDevice.verse` generado (hash idempotencia `A744E97185F1E913B0CFB33BA93CF181D236B793919C261E7DD0B56711B664A6`).
+- [x] `Content/Verse/Generated/EventPayloads_Generated.verse` generado.
+- [x] `Content/Verse/Core/EventBus.verse` placeholder source-controlled.
+- [x] `Content/Verse/Tests/test_event_bus_smoke.verse` smoke runtime PASS in-session UEFN (hash `61A441F77FEEE8C5C9649B572D9690B2070C2CCD028D398DBB1150D1E39B8224`).
+- [x] `scripts/build/tests/test_exporter_event_bus.py` golden contract Python — 5/5 tests PASS, runtime ~0.13s, sin deps externas.
+- [x] `scripts/build/tests/fixtures/event_bus_expected_contract.json` fixture canónico.
+- [x] Patrón canónico vigente documentado: `event_bus_device := class<concrete>(creative_device)` con propiedades `event(t)` builtin, instanciado en Main.umap como actor del nivel, accedido vía `@editable Bus:event_bus_device` desde devices consumidores.
+- [x] Patrón consumer canónico: `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn obligatorio + `loop { Await() }` listener.
+- [x] Test in-session PASS (smoke runtime UEFN 2026-05-09 tarde).
+- [x] Tag git SPR-009-resolved (creado por humano post-F-C-6).
+
+### Decision
+- **D-A11 (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution)**: EventBus es excepción a D-A7. `event_bus_device := class<concrete>(creative_device)` instanciado en Main.umap. Otros 5 Cores (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry siguen siendo singletons top-level estáticos. Razón: `event(t){}` top-level falla con err 3512 (mismo patrón que lección 11 — structs literal top-level dentro de module). Lección 16 nueva en VERSE_SYNTAX_GUIDE.
+
+### Lessons learned
+- **Lección 16 técnica**: `event(t)` builtin Verse v1 = `class(signalable(t), awaitable(t))`. **NO implementa `subscribable`**. NO `.Subscribe()` ni `.Unsubscribe()`. Único mecanismo de consumo = `Await()` + `Signal()` síncrono.
+- **Lección de proceso P1**: cuando un patrón canónico documentado falla en build real, NO asumir que el patrón es correcto y el build erróneo — investigar causa raíz contra `Verse.digest` + experimentos aislados ANTES de iterar fixes. F-A perdió ~2.5h por este antipatrón.
+- **Lección de proceso P2**: refactor docs masivo (>10 docs) tras cambio arquitectónico crítico → trocear en lotes pequeños (~250 líneas prompt CC, scope limitado), NO un solo prompt monolítico. F-C-4 = 8 commits / 12 docs / 0 errores.
+- **Lección de proceso P3**: capturar drift residual durante lote como reporte (no corregir en el momento) → cerrar en mini-lote bonus al final. F-C-4 capturó 2 drift en L3 → cerrados limpio en L3-bonus tras L5.
+
+### Docs (12 archivos autoritativos modificados en F-C-4 + 1 en F-C-5)
+- `BOOTSTRAP_PIPELINE.md` §11.5-11.8 (L1a) + §4.3/§4.4/§11.2 (L1c) — patrón device + cleanup
+- `API_REFERENCE_GENERATED.md` §3.5 (L1b) — sin `.Subscribe`/`.Unsubscribe`, solo `Signal/Await`
+- `VERSE_SYNTAX_GUIDE.md` §1 lección 16 + 4 sub-corolarios (L1b)
+- `CHANGELOG.md` — D-A11 + nota retroactiva D-A8 (L2) + esta entrada (F-C-6)
+- `GLOSSARY.md` — EventBus + event(t) reescritas + Await loop pattern (L2)
+- `SPRINTS_BACKLOG.md` — fila SPR-009 + bullet Notas C1+C3 (L3)
+- `CONCEPT.md` §13.3 — bloque SPR-009 done [x] (L3)
+- `MODULES_DEPENDENCY_GRAPH.md` — §4.2 arquitectura + §2.1 nota concrete + §11.2 tabla `Bus.<Evento>` + cabecera (L3 + L3-bonus)
+- `TESTING_PROTOCOL.md` §2.1 + §2.3 — plantilla Integration test Await loop (L4)
+- `PROMPT_TEMPLATES.md` §12 — mención §10 Python tests (L4)
+- `FOLDER_STRUCTURE_TRUTH.md` §1.1 + §4 + §8.2 — `EventBusDevice.verse` excepción (L5)
+- `JSON_SCHEMAS.md` §42 — cabecera + tabla §42.2 (L5)
+- `docs/postmortems/PM-SPR-009-blocked.md` — fase 2 resolución completa (F-C-5)
+- `docs/POSTMORTEMS_INDEX.md` — fila SPR-009 status Resolved (F-C-6, este patch)
+
+### Commits F-C-4 + F-C-5 (9 commits, todos en master pusheados)
+1. `acfecb0` — F-C-4-L1a BOOTSTRAP §11 post-H4
+2. F-C-4-L1b API_REFERENCE + VERSE_GUIDE
+3. F-C-4-L1c BOOTSTRAP cleanup
+4. F-C-4-L2 CHANGELOG + GLOSSARY
+5. F-C-4-L3 SPRINTS_BACKLOG + CONCEPT + MODULES
+6. F-C-4-L4 TESTING_PROTOCOL + PROMPT_TEMPLATES
+7. F-C-4-L5 FOLDER_STRUCTURE_TRUTH + JSON_SCHEMAS
+8. F-C-4-L3-bonus MODULES drift residual
+9. F-C-5 PM fase 2
+
+(SHAs reales: `git log --grep="F-C-4\|F-C-5" --oneline` post-cierre.)
+
+### Notas operativas
+- SPR-009 cerrado tras ~6h reales (vs 1.5h estimado). Estimación original errónea por 4× — el patrón canónico v0 documentado pre-SPR-009 no se había validado contra build UEFN real, y la lección 16 (`event(t)` no subscribable) emergió solo durante F-C-3a.
+- F0 progreso: SPR-001..SPR-009 cerrados. Solo falta **SPR-010 (AdminCommands + Panel)** para cierre completo Fase 0.
+
+---
+
 ## 🔧 Auditoría 2 — C1 (mayo 2026, viabilidad lógica e integración)
 
 > **Crítico C1: bootstrap circular `ModuleRegistry ↔ Logger`** detectado en auditoría 2. Tras re-verificación contra Verse oficial, parcialmente falso positivo: **no hay ciclo runtime** (Verse inicializa constantes top-level antes de OnBegin). Sí había **contradicciones documentales tri-vía** entre 3 docs autoritativos. Cerrado con refactor arquitectónico.
