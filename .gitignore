@@ -43,3 +43,6 @@ scripts/tools/_throwaway/*
 # F-B-investigación SPR-009: directorio throwaway para tests de patrón Verse
 # Promoción a Content/Verse/Tests/ si patrón compila, else borrar.
 # Content/Verse/_throwaway_pattern_tests/
+
+# Claude Code local config (no commitear)
+.claude/

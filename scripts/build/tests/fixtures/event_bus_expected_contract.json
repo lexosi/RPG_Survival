@@ -1,0 +1,52 @@
+{
+  "_doc": "Contrato semántico esperado del EventBusDevice.verse generado. Fuente: data/architecture/events_catalog.json. Test asociado: test_exporter_event_bus.py.",
+  "_generated_file": "Content/Verse/Generated/EventBusDevice.verse",
+  "_class_declaration": "event_bus_device<public> := class<concrete>(creative_device):",
+  "expected_events": [
+    {
+      "name": "PlayerStatsChanged",
+      "payload_type": "player_stats_changed_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "InventoryChanged",
+      "payload_type": "inventory_changed_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "LevelUp",
+      "payload_type": "level_up_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "CurrencySpent",
+      "payload_type": "currency_spent_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "CompanionAcquired",
+      "payload_type": "companion_acquired_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "QuestCompleted",
+      "payload_type": "quest_completed_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "RebirthDone",
+      "payload_type": "rebirth_done_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "ZoneUnlocked",
+      "payload_type": "zone_unlocked_payload",
+      "visibility": "public"
+    },
+    {
+      "name": "BossDefeated",
+      "payload_type": "boss_defeated_payload",
+      "visibility": "public"
+    }
+  ]
+}

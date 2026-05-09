@@ -16,6 +16,7 @@
 7. [Testing de UI](#7-testing-de-ui)
 8. [Testing móvil](#8-testing-móvil)
 9. [Test cleanup](#9-test-cleanup)
+10. [Tests estáticos Python (scripts/build/)](#10-tests-estáticos-python-scriptsbuild)
 
 ---
 
@@ -23,7 +24,8 @@
 
 ### 1.1 Realidad
 
-- ❌ **No hay pytest, JUnit, Jest, ni framework standard de tests para Verse.**
+- ❌ **No hay pytest, JUnit, Jest, ni framework standard de tests para código Verse en sí.**
+- ✅ **Sí hay `unittest` stdlib para tests Python de scripts en `scripts/build/`** (introducido SPR-009 F-C-3b). Ver §10. Aplica a validadores, exporters, transformers — NO a código Verse.
 - ❌ **No hay runner standalone CLI que ejecute tests sin UEFN abierto** (toolchain UEFN/Verse no expone build+test headless documentado).
 - ❌ **No hay mocking puro de devices Fortnite.**
 - ✅ **Tooling oficial Epic complementario** (no sustituye al device casero, pero usar):
@@ -606,15 +608,116 @@ Ejecutar antes de publish: `Tools > Execute Python Script > cleanup_tests.py`.
 
 Documentar en postmortem si el script Python falla por API no expuesta — ajustar §9.1 al script soportado realmente por UEFN.
 
-### 9.2 Los archivos `.verse` se quedan
+### 9.2 Los archivos de test se quedan
 
-- Los `test_device_SPRxxx.verse` permanecen en `Content/Verse/Tests/`.
-- No afectan al juego publicado (no están instanciados en level).
-- Sirven para **regression testing** futuro.
+- Los `test_device_SPRxxx.verse` permanecen en `Content/Verse/Tests/`. No afectan al juego publicado (no están instanciados en level). Sirven para regression testing futuro.
+- Los tests Python en `scripts/build/tests/` permanecen siempre. Se ejecutan en pre-commit / on-demand. NO requieren cleanup. Ver §10.
 
 ### 9.3 Versionado Git
 
 Carpeta `Content/Verse/Tests/` se commitea normal en Git. Es código del proyecto.
+
+---
+
+## 10. Tests estáticos Python (scripts/build/)
+
+### 10.1 Filosofía
+
+> **Tests Python validan outputs de scripts en `scripts/build/`. Test_devices Verse validan runtime in-session. Son complementarios, no excluyentes.**
+
+Introducidos en SPR-009 F-C-3b para cubrir un gap: el exporter `02_export_constants_to_verse.py` puede regresar silenciosamente (renombrar evento, perder visibility specifier, romper idempotencia) y solo se detectaría en build UEFN posterior — caro de diagnosticar. Test estático Python = primera línea de defensa, ejecuta en milisegundos sin UEFN abierto.
+
+### 10.2 Cuándo crear test Python (vs test_device Verse)
+
+| Si el sprint... | Tipo de test |
+|---|---|
+| Implementa script en `scripts/build/` (validador, exporter, transformer) | **Test Python** |
+| Implementa clase/módulo Verse con lógica runtime | **test_device Verse** (§3) |
+| Implementa script Python que genera Verse | **Ambos** — Python valida output estático, test_device valida runtime |
+| Modifica schema JSON existente | **Test Python** (validador) |
+| Modifica weak_map persistence | **test_device Verse** (§6) |
+
+### 10.3 Framework
+
+- **Stdlib `unittest`**. NO pytest. NO deps externas. Razón: cero requirements.txt overhead, alineado con resto proyecto.
+- Patrón: `class TestX(unittest.TestCase)` con métodos `test_<aspecto>`.
+- Invocación: `python -m unittest scripts.build.tests.test_<name> -v`.
+
+### 10.4 Estructura de archivos canónica
+
+```
+scripts/build/tests/
+├── __init__.py                              # vacío, marca package
+├── fixtures/
+│   └── <thing>_expected_contract.json       # contrato semántico esperado
+├── test_<thing>.py                          # test runner unittest
+└── test_<otra_cosa>.py
+```
+
+**Reglas**:
+- `__init__.py` vacío (no docstring, no código).
+- Fixtures como JSON con campo `_doc` describiendo el contrato + campos `_*` meta + lista `expected_*`.
+- Test runners: 1 por unidad bajo test (1 exporter = 1 file).
+- NO golden-files completos `.verse`/`.json` checked-in. Usar **contratos semánticos** (lista `[(name, type, visibility), ...]`) — frágiles solo a cambios contractuales reales, no cosméticos.
+
+### 10.5 Naming
+
+| Item | Convención |
+|---|---|
+| Test file | `test_<unit_under_test>.py` (ej. `test_exporter_event_bus.py`) |
+| Test class | `class Test<UnitUnderTest>(unittest.TestCase)` (ej. `TestExporterEventBus`) |
+| Test method | `test_<aspecto_específico>` (ej. `test_idempotency`) |
+| Fixture | `<unit>_expected_contract.json` (ej. `event_bus_expected_contract.json`) |
+
+### 10.6 Cobertura mínima recomendada para tests de exporters
+
+1. **Estructura**: declaration root presente e intacta (class/struct/module top-level).
+2. **Contrato**: cada item esperado presente con nombre + tipo + visibility correctos.
+3. **Count match**: número de items generados == número esperado en contrato.
+4. **No drift positivo**: no hay items generados fuera del contrato.
+5. **Idempotencia**: re-ejecutar exporter 2× consecutivas produce mismo hash SHA256.
+
+### 10.7 Cuándo correr
+
+| Trigger | Comando |
+|---|---|
+| Pre-commit (candidato hook futuro) | `python -m unittest discover scripts/build/tests/ -v` |
+| Manual on-demand durante debugging | `python -m unittest scripts.build.tests.test_<name> -v` |
+| **OBLIGATORIO** tras editar cualquier script en `scripts/build/` | full discover antes de commit |
+| Tras regenerar archivos `Generated/` | full discover (cubre idempotencia) |
+
+### 10.8 Lifecycle de un test Python
+
+```
+1. SPR-xxx implementa/modifica script en scripts/build/
+2. Crear/actualizar fixture de contrato esperado en scripts/build/tests/fixtures/
+3. Crear/actualizar test runner en scripts/build/tests/test_<name>.py
+4. Ejecutar: python -m unittest scripts.build.tests.test_<name> -v
+5. Si todos PASS → commit junto con el script editado
+6. Si algún FAIL → diagnosticar:
+   - ¿Bug en script? → arreglar script.
+   - ¿Drift legítimo en contrato? → actualizar fixture, NO el test.
+   - ¿Bug en test? → arreglar test, NO silenciar el FAIL.
+```
+
+### 10.9 Ejemplo de referencia (canónico)
+
+`scripts/build/tests/test_exporter_event_bus.py` (introducido F-C-3b, SPR-009):
+
+- 5 tests cubren `02_export_constants_to_verse.py::export_event_bus()`.
+- Fixture: `fixtures/event_bus_expected_contract.json` (9 eventos, contrato semántico).
+- Cobertura: class declaration + count + contrato per-event + drift positivo + idempotencia.
+- Runtime: ~0.13s.
+- Sin deps externas.
+
+**Replicar este patrón para futuros tests** de validadores/exporters/transformers en `scripts/build/`.
+
+### 10.10 Limitaciones reconocidas
+
+- NO valida compilación Verse — eso es test_device runtime in-session (§3) o build UEFN.
+- NO valida schema JSON catalog — eso es `01_validate_jsons.py` separado.
+- NO valida reglas semánticas cross-archivo (ej. event referenciado en código Verse pero ausente en catalog) — futuro test integrador, scope distinto.
+- Idempotencia detecta determinismo, no correctness. Un exporter idempotentemente buggy seguirá pasando.
 
 ---
 
@@ -626,8 +729,9 @@ Carpeta `Content/Verse/Tests/` se commitea normal en Git. Es código del proyect
 3. TÚ instancias el device en level, pulsas botones, ves HUD result
 4. Antes de publish: borras devices del level con cleanup_tests.py
 5. Smoke test master se queda permanente, valida que todo arranca
+6. Sprints que tocan scripts/build/ → tests Python unittest (§10) complementan los test_devices Verse
 
-NO HAY UNIT TESTS COMO PYTEST. Esto es lo más cerca posible.
+NO HAY UNIT TESTS PARA VERSE COMO PYTEST. Para Python build scripts SÍ — ver §10.
 ```
 
 ---
