@@ -17,6 +17,7 @@
 7. [Reglas de comunicación entre modelos](#7-reglas-de-comunicación-entre-modelos)
 8. [Cuándo escalar de DeepSeek a Opus](#8-cuándo-escalar-de-deepseek-a-opus)
 9. [Bugs conocidos y trampas de DeepSeek V4-Pro](#9-bugs-conocidos-y-trampas-de-deepseek-v4-pro)
+10. [Commits con messages multi-línea](#10-commits-con-messages-multi-línea)
 
 ---
 
@@ -614,6 +615,86 @@ DURANTE EL DÍA, ESCALAR A OPUS si:
    - Bug profundo
    - Conflicto entre docs
 ```
+
+---
+
+## 10. Commits con messages multi-línea
+
+### Patrón canónico (USAR SIEMPRE)
+
+```powershell
+$msg = @'
+mensaje multi-linea
+con cualquier caracter $($variables) "comillas" <tags> (parens) :colons
+'@
+
+[System.IO.File]::WriteAllText(
+    "F:\Noobs\RPG_Survival\.git\COMMIT_MSG.txt",
+    $msg,
+    (New-Object System.Text.UTF8Encoding($false))
+)
+
+git commit -F F:\Noobs\RPG_Survival\.git\COMMIT_MSG.txt
+```
+
+**Diferencias clave vs patrón roto**:
+- `@'...'@` (single-quote heredoc): desactiva interpolación de variables y expressions PowerShell.
+- `[System.IO.File]::WriteAllText` directo: bypassa pipe parser PowerShell.
+- `UTF8Encoding($false)`: sin BOM (BOM ensucia title del commit).
+- `.git/COMMIT_MSG.txt`: gitignored automáticamente (`.git/` directory).
+
+### NUNCA usar
+
+```powershell
+# ❌ ROMPE con caracteres especiales en contenido
+@"
+mensaje con <tags> o (parens) o : colons
+"@ | Out-File -Encoding utf8 archivo.txt
+
+# ❌ Encoding mojibake con tildes/acentos en PS 5.1
+git commit -m "mensaje con tildes á é í ó ú"
+```
+
+### Pre-commit check obligatorio
+
+Ejecutar SIEMPRE antes de `git commit`:
+
+```powershell
+.\scripts\maintenance\check_orphan_files.ps1
+```
+
+Si verde (✅) → OK proceder commit. Si rojo (❌) → archivos basura presentes en working dir, **limpiar antes de commit**.
+
+### Bug histórico documentado
+
+**Fecha**: 2026-05-08 sesión cierre F-C-3e SPR-009.
+
+**Síntoma**:
+- Commit + push exitoso aparente.
+- UEFN Revision Control falla con `Failed to access metadata for file <fragmento del commit message>`.
+- 4 archivos basura sin extensión en raíz del repo, fechas iguales al timestamp del commit.
+
+**Causa raíz**:
+- Heredoc `@"..."@ | Out-File` con strings conteniendo `<`, `>`, `(`, `)`, `:`.
+- Parser PowerShell 5.1 evalúa fragmentos como expressions/redirections antes de Out-File procesar.
+- Side effect: archivos basura creados con fragmentos del texto como nombres.
+- Sin error reportado. Out-File cumple su función principal correctamente.
+
+**Cleanup forensic aplicado**:
+
+```powershell
+# Standard (mayoría de casos)
+Get-ChildItem -Path $repo -File -Force |
+    Where-Object { $_.Name -match '^<patron>' } |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+
+# Edge case: nombres con trailing dot (Windows trata especial)
+Remove-Item -LiteralPath "\\?\F:\Noobs\RPG_Survival\<filename>" -Force
+```
+
+Prefix `\\?\` desactiva normalización de path Windows, permite acceso directo a entry filesystem con caracteres edge.
+
+**Lección general**: PowerShell 5.1 + heredocs + caracteres especiales = riesgo silencioso. Patrón canónico arriba **NO afectado** porque single-quote heredoc + WriteAllText directo bypassan parser pipe.
 
 ---
 
