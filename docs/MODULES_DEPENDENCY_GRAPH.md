@@ -8,7 +8,7 @@
 >
 > **Decisión cerrada (paths)**: el root del path Verse = nombre del proyecto UEFN (visible en `/localhost/<ProjectName>/...` durante desarrollo). Sustituir `<ProjectName>` por el nombre real al crear el proyecto. **Separadores siempre `/`, nunca `.`. La carpeta `Content/Verse/` NO aparece en el path** — el root Verse del proyecto se mapea directamente al inicio del path.
 >
-> **Decisión cerrada (arquitectura Core, Auditoría 2 — C1)**: los 6 módulos Core (Logger, EventBus, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry son **singletons top-level estáticos**, NO `creative_device`, NO se auto-registran. Verse los inicializa antes de cualquier `OnBegin`. Acceso por `using { /<ProjectName>/Core/<Modulo> }`. ModuleRegistry sirve solo a Systems gameplay (Capa 2+) para resolver lookup runtime y evitar ciclos de import compile-time. Detalle en §2.1 + §4.7.
+> **Decisión cerrada (arquitectura Core, Auditoría 2 — C1 + Auditoría regresión bloque 5 — H4)**: **5 de los 6** módulos Core (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry son **singletons top-level estáticos**, NO `creative_device`, NO se auto-registran. Verse los inicializa antes de cualquier `OnBegin`. Acceso por `using { /<ProjectName>/Core/<Modulo> }`. ModuleRegistry sirve solo a Systems gameplay (Capa 2+) para resolver lookup runtime y evitar ciclos de import compile-time. **Excepción D-A11 (post-SPR-009 F-C-2)**: EventBus es `creative_device` (no singleton top-level) — instanciado en Main.umap, referenciado vía `@editable Bus:event_bus_device`. Razón: `event(t){}` top-level falla con err 3512 (lección 16 VERSE_SYNTAX_GUIDE). Detalle en §2.1 + §4.2 + §4.7.
 >
 > **Decisión cerrada (EventBus tipado, Auditoría 2 — C3)**: el EventBus operativo se **genera** desde `data/architecture/events_catalog.json`, componiendo instancias `event(payload_t)` nativas de Verse. Type-safety compile-time. Sin string-magic. Detalle en §4.2 + §11.2 + `BOOTSTRAP_PIPELINE.md` §11.
 >
@@ -137,7 +137,7 @@ python scripts/tools/replace_project_name.py --name=MyActualProjectName
 >
 > Fuente oficial: [Constants and Variables in Verse — Epic Dev Docs](https://dev.epicgames.com/documentation/en-us/fortnite/constants-and-variables-in-verse). Patrón singleton oficial: [forums.unrealengine.com — singletons in Verse](https://forums.unrealengine.com/t/i-came-up-with-a-way-to-make-singletons-in-verse/1139453).
 
-> **Specifier `<concrete>` obligatorio (decisión cerrada Auditoría 3 — H3.1)**: el tipo `<x>_module` que se instancia con archetype vacío (`<x>_module{}`) DEBE declararse como `class<concrete>:`, no como `class:` ni como `module:`. Razón ([dev.epicgames.com — Class in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/class-in-verse)): *"When a class has the concrete specifier, it is possible to construct it with an empty archetype, such as cat{}. This means that every field of the class must have a default value."* Sin `<concrete>` el constructor `<x>_module{}` no compila garantizadamente. Aplica a (1) los 6 Core (Logger, EventBus, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry — singletons top-level, y (2) los Systems registrables Capa 2+ (PlayerStats, PlayerInventory, CurrencyManager, etc.) — se instancian con `<id>_module{}` en `OnBegin` del device antes de registrarse en el Registry. NO confundir con `module := module:` (palabra reservada de namespace, distinta sintaxis sin archetype).
+> **Specifier `<concrete>` obligatorio (decisión cerrada Auditoría 3 — H3.1)**: el tipo `<x>_module` que se instancia con archetype vacío (`<x>_module{}`) DEBE declararse como `class<concrete>:`, no como `class:` ni como `module:`. Razón ([dev.epicgames.com — Class in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/class-in-verse)): *"When a class has the concrete specifier, it is possible to construct it with an empty archetype, such as cat{}. This means that every field of the class must have a default value."* Sin `<concrete>` el constructor `<x>_module{}` no compila garantizadamente. Aplica a (1) **5 de los 6 Core** (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry — singletons top-level instanciados con `<x>_module{}`, y (2) los Systems registrables Capa 2+ (PlayerStats, PlayerInventory, CurrencyManager, etc.) — se instancian con `<id>_module{}` en `OnBegin` del device antes de registrarse en el Registry. **Excepción D-A11**: EventBus NO se instancia con `event_bus_module{}` top-level (patrón obsoleto post-F-C-2 SPR-009). El patrón vigente es `event_bus_device := class<concrete>(creative_device):` instanciado en Main.umap como actor del nivel — el `<concrete>` específico del device sigue siendo obligatorio (la propiedad `@editable` lo construye con archetype vacío `event_bus_device{}` cuando se le hace drag&drop), pero el lifecycle de instanciación es UEFN runtime, no top-level Verse. NO confundir con `module := module:` (palabra reservada de namespace, distinta sintaxis sin archetype).
 
 #### Implicación arquitectónica
 
@@ -926,17 +926,19 @@ Hook pre-commit + CI step. Drift no merge-eable.
 
 Los más críticos (no romper firma del payload):
 
-| Evento (id) | Nombre Verse en EventBus | Struct payload | Emitido por | Escuchado por |
+| Evento (id) | Nombre Verse en EventBus (acceso vía `@editable Bus`) | Struct payload | Emitido por | Escuchado por |
 |---|---|---|---|---|
-| `player_stats_changed` | `EventBus.PlayerStatsChanged` | `player_stats_changed_payload{Player, Stat, OldValue, NewValue}` | PlayerStats | HUD, Achievement, SocialDisplay |
-| `inventory_changed` | `EventBus.InventoryChanged` | `inventory_changed_payload{Player, ItemID, Delta}` | PlayerInventory | InventoryUI, AutoSell, Quest, Achievement |
-| `level_up` | `EventBus.LevelUp` | `level_up_payload{Player, OldLevel, NewLevel}` | PlayerProgression | HUD, Notif, BattlePass, Achievement |
-| `currency_spent` | `EventBus.CurrencySpent` | `currency_spent_payload{Player, Currency, Amount, Source}` | CurrencyManager | Audit, Achievement, Quest |
-| `companion_acquired` | `EventBus.CompanionAcquired` | `companion_acquired_payload{Player, CompanionID, Rarity, Variant}` | LootboxSystem, ResourceNodes | CollectionDex, Achievement, Notif, SocialDisplay |
-| `quest_completed` | `EventBus.QuestCompleted` | `quest_completed_payload{Player, QuestID, Rewards}` | QuestEngine | Notif, Achievement, BattlePass |
-| `rebirth_done` | `EventBus.RebirthDone` | `rebirth_done_payload{Player, RebirthCount}` | PlayerRebirth | SocialDisplay, Achievement, Leaderboard |
-| `zone_unlocked` | `EventBus.ZoneUnlocked` | `zone_unlocked_payload{Player, ZoneID}` | ZoneManager | Achievement, Notif, Quest |
-| `boss_defeated` | `EventBus.BossDefeated` | `boss_defeated_payload{Player, BossID, Time}` | BossEncounters | Achievement, Notif, Leaderboard |
+| `player_stats_changed` | `Bus.PlayerStatsChanged` | `player_stats_changed_payload{Player, Stat, OldValue, NewValue}` | PlayerStats | HUD, Achievement, SocialDisplay |
+| `inventory_changed` | `Bus.InventoryChanged` | `inventory_changed_payload{Player, ItemID, Delta}` | PlayerInventory | InventoryUI, AutoSell, Quest, Achievement |
+| `level_up` | `Bus.LevelUp` | `level_up_payload{Player, OldLevel, NewLevel}` | PlayerProgression | HUD, Notif, BattlePass, Achievement |
+| `currency_spent` | `Bus.CurrencySpent` | `currency_spent_payload{Player, Currency, Amount, Source}` | CurrencyManager | Audit, Achievement, Quest |
+| `companion_acquired` | `Bus.CompanionAcquired` | `companion_acquired_payload{Player, CompanionID, Rarity, Variant}` | LootboxSystem, ResourceNodes | CollectionDex, Achievement, Notif, SocialDisplay |
+| `quest_completed` | `Bus.QuestCompleted` | `quest_completed_payload{Player, QuestID, Rewards}` | QuestEngine | Notif, Achievement, BattlePass |
+| `rebirth_done` | `Bus.RebirthDone` | `rebirth_done_payload{Player, RebirthCount}` | PlayerRebirth | SocialDisplay, Achievement, Leaderboard |
+| `zone_unlocked` | `Bus.ZoneUnlocked` | `zone_unlocked_payload{Player, ZoneID}` | ZoneManager | Achievement, Notif, Quest |
+| `boss_defeated` | `Bus.BossDefeated` | `boss_defeated_payload{Player, BossID, Time}` | BossEncounters | Achievement, Notif, Leaderboard |
+
+> **Convención `Bus.<Evento>`**: la columna "Nombre Verse en EventBus" usa `Bus` como nombre canónico de la propiedad `@editable Bus:event_bus_device` que cada device consumidor declara para referenciar el `event_bus_device` del nivel (drag&drop en UEFN). El nombre real puede variar por device (`EventBus`, `Bus`, `Events`, etc.) — es decisión del dev del consumidor. Lo invariante es la cadena `<prop>.<NombreEvento>` con el evento canónico definido en el catalog. Patrón H4 post-SPR-009 F-C-2 — antes (pre-H4) era `EventBus.<Evento>` sobre singleton top-level global, obsoleto. Detalle en §4.2 + `BOOTSTRAP_PIPELINE.md` §11.7 + `API_REFERENCE_GENERATED.md` §3.5.
 
 > **Si añades un campo a un payload**: seguro si todos los emisores se actualizan al rellenarlo en la misma PR.
 > **Si renombras o eliminas un campo**: los suscriptores fallan compilación inmediatamente (mejor que el patrón viejo). Tratamiento: deprecar 1 release antes de eliminar (ver `JSON_SCHEMAS.md` §42.4).
