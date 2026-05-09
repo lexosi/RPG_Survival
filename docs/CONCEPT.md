@@ -1330,19 +1330,25 @@ Content/Verse/
 - **Sistema(s)**: SYS-072 (event bus)
 - **Dependencias**: SPR-004, SPR-006
 - **Tipo**: verse
-- **Tiempo**: 1.5h
+- **Tiempo**: 1.5h estimado (~6h real con F-A rollback + F-B investigación H1-H5 + F-C refactor + F-C-3 tests)
+- **Estado**: 🟢 done (cierre 2026-05-08, HEAD `6c90e45`)
 - **Archivos**:
-  - `Content/Verse/Core/EventBus.verse` (placeholder source-controlled — declara `event_bus_module := class<concrete>:`)
-  - `Content/Verse/Generated/EventBusConstants.verse` (**generado por SPR-004 ext** desde `events_catalog.json` — singleton `EventBus` + propiedad `event(payload_t)` por evento)
+  - `Content/Verse/Core/EventBus.verse` (placeholder source-controlled — declara tipos auxiliares si se conserva, no contiene la instancia operativa)
+  - `Content/Verse/Generated/EventBusDevice.verse` (**generado por SPR-004 ext** desde `events_catalog.json` — `event_bus_device := class<concrete>(creative_device)` con propiedad `event(payload_t)` por evento). NO singleton top-level — el device se instancia en Main.umap. Patrón H4 (post-F-C-2).
   - `Content/Verse/Generated/EventPayloads_Generated.verse` (**generado por SPR-004 ext** — un struct por evento)
+  - `Content/Verse/Tests/test_event_bus_smoke.verse` (smoke test runtime — F-C-3a)
+  - `scripts/build/tests/test_exporter_event_bus.py` + `scripts/build/tests/fixtures/event_bus_expected_contract.json` (golden contract Python — F-C-3b)
 - **Done**:
-  - [ ] `Core/EventBus.verse` declara el tipo `event_bus_module` (placeholder source-controlled — el operativo se genera en `Generated/`)
-  - [ ] `Generated/EventBusConstants.verse` declara `EventBus<public> : event_bus_module = event_bus_module{}` como singleton top-level con una propiedad `<NombreEvento>:event(<nombre_evento>_payload)` por cada entrada de `data/architecture/events_catalog.json`
-  - [ ] `Generated/EventPayloads_Generated.verse` contiene un `struct` por cada evento del catálogo con campos planos tipados (no `any`)
-  - [ ] Patrón canónico funcional: `EventBus.<Evento>.Signal(payload_struct)`, `.Subscribe(handler_tipado)`, `.Unsubscribe(handler_tipado)`, `.Await()` (todos provistos por la primitiva `event(t)` nativa, no implementados a mano)
-  - [ ] Type-safety compile-time verificada: cambiar un campo de un struct payload rompe compilación en todos los suscriptores
-  - [ ] Sin strings, sin `Payload:any`, sin `Subscribe(EventName:string, ...)` — esas firmas están explícitamente prohibidas (ver `API_REFERENCE_GENERATED.md` §3.5)
-- **Notas C1 + C3**: paralelizable con SPR-005/007/008. **C3 cerrado (Auditoría 2)**: payload type-safety resuelta con `event(payload_t)` nativo de Verse, no implementación custom. Spec completa del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42. Catálogo de eventos en `MODULES_DEPENDENCY_GRAPH.md` §11.2. La generación de los 2 archivos en `Generated/` es responsabilidad del exporter Python de SPR-004 extendido — alineado con el patrón ya usado por `ModuleRegistryConstants.verse`. Tiempo subió 1h → 1.5h por el coste de validar el catálogo + smoke del patrón emit/subscribe en `test_device_SPR009`. La generación Python pertenece a SPR-004 (ya contabilizada allí).
+  - [x] `Generated/EventBusDevice.verse` declara `event_bus_device<public> := class<concrete>(creative_device):` con una propiedad `<NombreEvento><public>:event(<nombre_evento>_payload) = event(<nombre_evento>_payload){}` por cada entrada de `data/architecture/events_catalog.json`
+  - [x] La instancia operativa se coloca en Main.umap como actor del nivel; consumidores la referencian via `@editable Bus:event_bus_device = event_bus_device{}` (drag&drop en UEFN)
+  - [x] `Generated/EventPayloads_Generated.verse` contiene un `struct` por cada evento del catálogo con campos planos tipados (no `any`)
+  - [x] Patrón canónico funcional: `Bus.<Evento>.Signal(payload_struct)` (síncrono — handlers Await resumen dentro de Signal antes de retornar) y `Bus.<Evento>.Await()` (consumer suspende corutina hasta próximo Signal). **NO existe `.Subscribe(handler)` ni `.Unsubscribe(handler)`** en `event(t)` builtin Verse v1 (la primitiva implementa `signalable + awaitable` only, NO `subscribable`)
+  - [x] Patrón consumer canónico: `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn + `ListenerFn()<suspends>:void= loop { Payload := Bus.<Evento>.Await() ; <handler>(Payload) }`. `Sleep(0.0)` post-spawn es **obligatorio** para evitar race silenciosa Signal-antes-de-Await
+  - [x] Type-safety compile-time verificada: cambiar un campo de un struct payload rompe compilación en todos los consumidores
+  - [x] Sin strings, sin `Payload:any`, sin `Subscribe(EventName:string, ...)` — esas firmas están explícitamente prohibidas (ver `API_REFERENCE_GENERATED.md` §3.5)
+  - [x] Smoke test runtime PASS in-session UEFN (test device `Tests/test_event_bus_smoke.verse`, 2026-05-08)
+  - [x] Golden contract Python PASS — 5 tests cubren `02_export_constants_to_verse.py::export_event_bus()` (class declaration + count + contrato per-event + drift positivo + idempotencia)
+- **Notas C1 + C3 + H4**: **C3 cerrado (Auditoría 2)**: payload type-safety resuelta con `event(payload_t)` nativo de Verse, no implementación custom. **H4 cerrado (SPR-009 F-C-2 post-investigación F-B)**: el patrón `event_bus_module := class<concrete>:` + singleton top-level (canonizado en BOOTSTRAP §11.5 v0 + API §3.5 v0) **NO compila** — `event(t){}` top-level falla con err 3512 (lección 16 VERSE_SYNTAX_GUIDE). Solución vigente: `event_bus_device := class<concrete>(creative_device)` instanciado en Main.umap, referenciado vía `@editable`. Decisión arquitectónica D-A11 en CHANGELOG (excepción a D-A7 — los otros 5 Cores siguen siendo singletons top-level). Spec completa del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42. Catálogo de eventos en `MODULES_DEPENDENCY_GRAPH.md` §11.2. La generación de los 2 archivos en `Generated/` es responsabilidad del exporter Python de SPR-004 extendido. Tiempo subió 1h → 1.5h estimado por el coste de validar el catálogo + smoke del patrón emit/consume — **el real fue ~6h** porque la investigación F-B descartó 5 hipótesis (H1-H3 fail, H5 viable solo con device parent → H4) antes de converger en el patrón final. Postmortem fase 1: `docs/postmortems/PM-SPR-009-blocked.md`. Postmortem fase 2 (resolución): pendiente F-C-5 SPR-009.
 
 #### SPR-010 — Verse: Admin Commands
 

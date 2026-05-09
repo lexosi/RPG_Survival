@@ -141,7 +141,9 @@ python scripts/tools/replace_project_name.py --name=MyActualProjectName
 
 #### Implicación arquitectónica
 
-**Los 6 módulos Core son singletons estáticos top-level. NO heredan de `creative_device`. NO se registran en `ModuleRegistry`. Se acceden directamente con `using { /<ProjectName>/Core/<NombreModulo> }`.**
+**5 de los 6 módulos Core son singletons estáticos top-level. NO heredan de `creative_device`. NO se registran en `ModuleRegistry`. Se acceden directamente con `using { /<ProjectName>/Core/<NombreModulo> }`. Los 5 son: Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands.**
+
+**Excepción D-A11 (post-SPR-009 F-C resolution)**: **EventBus es un `creative_device`**, NO singleton top-level — el patrón top-level falla con err 3512 al instanciar `event(t){}` (lección 16 VERSE_SYNTAX_GUIDE). El device se instancia en Main.umap y se referencia desde otros devices vía `@editable Bus:event_bus_device`. Detalle en §4.2 + `BOOTSTRAP_PIPELINE.md` §11.
 
 ```verse
 # Patrón canónico vigente (post SPR-211) para Core sin state
@@ -174,7 +176,7 @@ Este orden refleja **dependencias compile-time** entre Core, no orden de ejecuci
 | # | Módulo Core | Depende compile-time de | Por qué |
 |---|---|---|---|
 | 1 | `Logger` | nada | base de logging, sin dependencias |
-| 2 | `EventBus` | `Logger` | loguea suscripciones/emisiones |
+| 2 | `EventBus` (creative_device, excepción D-A11) | `Logger` | loguea Signals/Awaits (entry/exit en métodos del device) |
 | 3 | `TimeSync` | `Logger` | loguea drift y warnings |
 | 4 | `PersistenceLayer` | `Logger` | loguea load/save y validación defensiva |
 | 5 | `BigNumbers` | `Logger` | loguea overflow al rango int64 |
@@ -200,7 +202,7 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 - ✅ Core son singletons top-level → vivos antes que cualquier Systems los necesite.
 - ✅ `Generated/*` son constantes inmutables → vivas antes que cualquier Systems las lea (Capa 1 inicializa antes que Capa 2 por dependencia compile-time).
 - ✅ `PlayerStats` lee `Generated/PlayerStats_Generated.verse` → Generated existe en compile-time.
-- ✅ `AchievementEngine` se suscribe a eventos en su propio `Init()` (llamado por GameManager) → no hay deps compile-time hacia los emisores, solo runtime via `EventBus.<Evento>.Subscribe(handler_tipado)` por evento (un `Subscribe` por cada `event(payload_t)` del catálogo, ver §11.2).
+- ✅ `AchievementEngine` se conecta a eventos en su propio `OnBegin()` (llamado por UEFN cuando el device arranca) → no hay deps compile-time hacia los emisores, solo runtime via `spawn { loop { Payload := Bus.<Evento>.Await() ; ... } }` por evento (un task spawneado por cada `event(payload_t)` del catálogo, ver §11.2). Patrón canónico Verse v1 — `event(t)` builtin no implementa `subscribable`, ver `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
 - ⚠️ **Lo único que sí controlamos**: el orden en que `GameManager.OnBegin` llama a `Init()` de los Systems. Documentado en `BOOTSTRAP_PIPELINE.md` §pipeline-runtime.
 
 ---
@@ -277,10 +279,11 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 
 ### 4.2 `Core/EventBus.verse` (SYS-072, SPR-009)
 
-- 📤 Deps: ninguna en compile-time como módulo source-controlled (el archivo manual). El **EventBus operativo** vive en `Generated/EventBusConstants.verse` que importa `Generated/EventPayloads_Generated.verse`.
-- 📥 Consumidores: ~40 módulos que emiten/escuchan eventos (importan `Generated/EventBusConstants` directamente).
+- 📤 Deps: ninguna en compile-time como módulo source-controlled (el archivo manual es placeholder mínimo). El **EventBus operativo** vive en `Generated/EventBusDevice.verse` (archivo generado por SPR-004 ext desde `data/architecture/events_catalog.json`).
+- 📥 Consumidores: ~40 devices que emiten/escuchan eventos. Cada device referencia `Generated/EventBusDevice` vía `using { /<ProjectName>/Generated/EventBusDevice }` + propiedad `@editable Bus:event_bus_device = event_bus_device{}` (drag&drop la instancia en UEFN al editar el device).
 - ⚡ **Las dependencias runtime de eventos NO se reflejan aquí** (ver §11.2).
-- 🏗️ **Arquitectura (C1 + C3)**: el "EventBus" del proyecto es un singleton top-level **generado** desde `data/architecture/events_catalog.json`. Compone instancias `event(payload_t)` nativas de Verse (parametric type compile-time, ver `Verse.digest`). Type-safety garantizada por compilador. Sin string-magic, sin `Payload:any`. Detalle del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42.
+- 🏗️ **Arquitectura (C1 + C3 + H4)**: el "EventBus" del proyecto es un `creative_device` **generado** desde `data/architecture/events_catalog.json`. Compone instancias `event(payload_t)` builtin Verse v1 (= `class(signalable(t), awaitable(t))`, ver `Verse.digest`). Type-safety garantizada por compilador. Sin string-magic, sin `Payload:any`. **NO singleton top-level** — el patrón top-level (`event_bus_module := class<concrete>:` + `EventBus<public> : event_bus_module = event_bus_module{}`) falla con err 3512 (`event(t){}` top-level propaga `<transacts>` al contexto top-level `<computes>` puro — lección 16 VERSE_SYNTAX_GUIDE). Solución vigente: `event_bus_device<public> := class<concrete>(creative_device):` con las propiedades `event(t)` como miembros. La instancia operativa se coloca en Main.umap como actor del nivel. **Excepción explícita a D-A7** (que declara los 6 Cores como singletons top-level): solo EventBus es device; los otros 5 Cores (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + Registry siguen siendo singletons top-level. Decisión arquitectónica D-A11 (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution). Detalle del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42. API consumer en `API_REFERENCE_GENERATED.md` §3.5. Lección syntax canónica en `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
+- 🔧 **Patrón consumer canónico (post-F-C-3a)**: `event(t)` builtin Verse v1 NO implementa `subscribable` — `.Subscribe(handler)` y `.Unsubscribe(handler)` **no existen**. Único mecanismo de consumo = `Await()`. Listener persistente = `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn + `ListenerFn()<suspends>:void= loop { Payload := Bus.<Evento>.Await() ; <handler>(Payload) }`. `Sleep(0.0)` post-spawn obligatorio (evita race Signal-antes-de-Await). `Signal()` síncrono (handlers Await resumen dentro de Signal antes de retornar). Validado runtime SPR-009 F-C-3a.
 
 ### 4.3 `Core/TimeSync.verse` (SYS-068, SPR-007)
 
@@ -919,7 +922,7 @@ Hook pre-commit + CI step. Drift no merge-eable.
 >
 > **Decisión cerrada (Auditoría retrospectiva — Bloque 1, B1.2)**: el campo identificador del jugador en payloads es `Player:player` (tipo nativo Verse), **NO** `PlayerID:int`. Razón: la API Verse pública de `player` no expone `GetID()` ni getter de identidad estable, por lo que un emisor no puede poblar un `int`. Además `player` es la key directa del `weak_map` de persistencia → los suscriptores pueden hacer `Persistence.LoadPlayerCore(Payload.Player)` sin lookup intermedio. Coherente con D-A13.
 >
-> Catálogo declarativo en `data/architecture/events_catalog.json` (schema en `JSON_SCHEMAS.md` §42). Genera `Generated/EventPayloads_Generated.verse` + `Generated/EventBusConstants.verse`. Patrón completo en `BOOTSTRAP_PIPELINE.md` §11.
+> Catálogo declarativo en `data/architecture/events_catalog.json` (schema en `JSON_SCHEMAS.md` §42). Genera `Generated/EventPayloads_Generated.verse` + `Generated/EventBusDevice.verse` (creative_device — patrón H4, post-F-C-2 SPR-009). Patrón completo en `BOOTSTRAP_PIPELINE.md` §11. Acceso desde otros devices vía `@editable Bus:event_bus_device`.
 
 Los más críticos (no romper firma del payload):
 
