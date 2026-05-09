@@ -46,6 +46,55 @@
 > **Sección donde se acumulan cambios del sprint en curso.**
 > **Mover a versión correspondiente al cerrar fase.**
 
+### SPR-009 — EventBus device pattern (2026-05-09, post-H4 resolution)
+
+> **Contexto**: cierre de SPR-009 tras investigación F-B + refactor F-C. La implementación reveló que el patrón H4 (`event_bus_device := class<concrete>(creative_device)`) es la única vía viable para EventBus operativo en Verse v1. El patrón anterior de singleton top-level (canonizado en D-A8 y replicado en BOOTSTRAP §11.5 v0 + API §3.5 v0) **NO es viable** — `event(t){}` top-level falla con err 3512 (mismo origen que lección 11 VERSE_SYNTAX_GUIDE). Adicionalmente, `event(t)` builtin Verse v1 = `class(signalable(t), awaitable(t))` SIN `subscribable` — los métodos `.Subscribe()` / `.Unsubscribe()` NO existen sobre instancias `event(t)`. Patrón consumer canónico vigente: `spawn{}` + `Await()` loop con `Sleep(0.0)` post-spawn.
+
+#### Changed
+- **`docs/BOOTSTRAP_PIPELINE.md` §11.5**: plantilla reescrita de `EventBusConstants.verse` (singleton top-level con `event_bus_module := class<concrete>:`) → `EventBusDevice.verse` (`event_bus_device := class<concrete>(creative_device):`). Patrón H4. (F-C-4-L1a)
+- **`docs/BOOTSTRAP_PIPELINE.md` §11.6**: transformer Python `export_event_bus()` reescrito. Output path `EventBusConstants.verse` → `EventBusDevice.verse`. Plantilla emitida actualizada. (F-C-4-L1a)
+- **`docs/BOOTSTRAP_PIPELINE.md` §11.7**: patrón uso runtime reescrito. Producer `Bus.<Evento>.Signal(payload)` (síncrono). Consumer `spawn { loop { Payload := Bus.<Evento>.Await() ; ... } }` con `Sleep(0.0)` post-spawn. Eliminado `EventBus.<Evento>.Subscribe(handler)` (no existe en `event(t)` builtin). (F-C-4-L1a)
+- **`docs/BOOTSTRAP_PIPELINE.md` §11.8**: tabla "Ventajas vs plan original" actualizada con fila "Patrón consumer" + nota en fila "Soporte await" precisando que `event(t)` es awaitable y es el primitivo único de subscripción en Verse v1. (F-C-4-L1a)
+- **`docs/BOOTSTRAP_PIPELINE.md` preámbulo + §4.3 + §4.4 + §11.2**: 4 ocurrencias de `EventBusConstants.verse` / `event_bus_module` actualizadas a `EventBusDevice.verse` / `event_bus_device := class<concrete>(creative_device)`. Cross-refs a lección 16 + D-A11 añadidas. (F-C-4-L1c)
+- **`docs/API_REFERENCE_GENERATED.md` §3.5**: reescrita entera. Header arquitectura ahora dice `creative_device` (no singleton top-level). Acceso vía `@editable Bus:event_bus_device` en class consumer. Métodos disponibles documentados como Signal + Await SOLAMENTE. Sección "Funciones que NO existen" expandida: ahora incluye `Bus.<Evento>.Subscribe(handler_tipado)` y `Bus.<Evento>.Unsubscribe(handler_tipado)` con explicación canónica de por qué no existen. (F-C-4-L1b)
+- **`docs/VERSE_SYNTAX_GUIDE.md` §1**: añadida **Lección 16** (`event(t){}` literal top-level falla 3512 — mismo patrón que lección 11). 4 sub-corolarios: A (`event(t)` no implementa `subscribable`), B (patrón consumer = spawn + Await loop), C (`Sleep(0.0)` post-spawn evita race silenciosa), D (`Signal()` es síncrono en Verse v1). Contador de lecciones actualizado 13 → 16 (de paso corrigió desincronización pre-existente del header — el archivo tenía 15 lecciones reales pero header decía 13). (F-C-4-L1b)
+- **`docs/VERSE_SYNTAX_GUIDE.md` §3**: añadidas 2 filas a tabla anti-patrones (`event(t){}` top-level fail 3512, `Bus.<Evento>.Subscribe(handler)` unknown identifier). Ambas remiten a lección 16. (F-C-4-L1b)
+- **`docs/CHANGELOG.md` D-A8**: añadida nota retroactiva (esta entrada). La decisión D-A8 sigue válida en su esencia (composición de primitivas Verse, type-safety compile-time, no `Payload:any`) — el "envoltorio" cambia: en lugar de singleton top-level (`EventBus<public> : event_bus_module = event_bus_module{}`), ahora device (`event_bus_device := class<concrete>(creative_device)`). (F-C-4-L2)
+- **`docs/GLOSSARY.md` `### EventBus`**: reescrita completa para reflejar patrón device + Await loop. (F-C-4-L2)
+- **`docs/GLOSSARY.md` `### event(t) — primitiva nativa Verse`**: actualizada para precisar que `event(t)` builtin Verse v1 = `class(signalable(t), awaitable(t))` SIN `subscribable`. La descripción anterior afirmaba "implementa `signalable(t)` + `awaitable(t)` + `subscribable(t)`" — error de doc original (drift desde patches C3 antiguos). Validado runtime SPR-009 F-C-3a. (F-C-4-L2)
+
+#### Added
+- **`docs/GLOSSARY.md` `### Await loop pattern`**: entrada nueva. Describe el patrón consumer canónico de eventos en Verse v1 (`spawn{}` + `loop{}` + `Await()` + `Sleep(0.0)` post-spawn). Sustituye al inexistente `Subscribe(handler)`. (F-C-4-L2)
+- **Hash idempotencia EventBusDevice.verse**: `A744E97185F1E913B0CFB33BA93CF181D236B793919C261E7DD0B56711B664A6`. Confirmada por golden contract test 5 tests PASS (`scripts/build/tests/test_exporter_event_bus.py`).
+- **Smoke test runtime EventBus**: PASS in-session UEFN 2026-05-08. Test device `Content/Verse/Tests/test_event_bus_smoke.verse`. Validó: producer Signal síncrono, consumer Await loop, race fix Sleep(0.0).
+- **Tests Python complementarios**: `scripts/build/tests/{__init__.py,fixtures/event_bus_expected_contract.json,test_exporter_event_bus.py}`. 5 tests cubren `02_export_constants_to_verse.py::export_event_bus()`. Patrón canónico para futuros tests de exporters/validadores en `scripts/build/`. Documentado en `TESTING_PROTOCOL.md` §10 (introducido F-C-3c).
+- **Anomalía D-A7 documentada**: post-H4, EventBus es **excepción** a D-A7 (que declara los 6 Cores + Registry como singletons top-level). Solo EventBus es device. Los otros 5 Cores + Registry siguen siendo singletons top-level. Lista corregida implícitamente: 5 Cores top-level (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + 1 Core device (EventBus) + Registry top-level. Pendiente reflejarlo en `MODULES_DEPENDENCY_GRAPH.md` §2.1 y `TESTING_PROTOCOL.md` §2.1 (lotes posteriores L3 + L4).
+
+#### Verified — no se aplica fix
+- **H4-FP1** — sospecha "renombrar `event_bus_device` → `event_bus_singleton` para uniformidad con D-A7". Re-verificación: **falso positivo**. El patrón device es semánticamente distinto a singleton top-level (vive en Main.umap, se referencia vía `@editable`, lifecycle gestionado por UEFN). Forzar nombre `_singleton` confundiría el patrón. Naming `_device` refleja la realidad arquitectónica.
+- **H4-FP2** — sospecha "abandonar `event(t)` builtin y construir map custom de handlers para soportar `Subscribe`". Re-verificación contra `Verse.digest` + smoke runtime: **falso positivo**. La primitiva `event(t)` es la API canónica de eventos en Verse v1. Construir map custom (1) reinventa la rueda con peor type-safety, (2) requiere implementación manual de race fix Sleep(0.0), (3) descarta el `awaitable` nativo. El patrón `spawn + Await loop` es canónico Verse, no workaround.
+
+#### Decisions
+- **D-A11 (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution)**: el EventBus operativo es **excepción a D-A7**. Mientras los 5 Cores top-level (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry siguen siendo `<modulo>_module := class<concrete>:` singletons top-level, **EventBus es `event_bus_device := class<concrete>(creative_device)`** instanciado en Main.umap. Razón forzada: `event(t){}` top-level falla con err 3512 (propaga `<transacts>` al contexto top-level `<computes>` puro, mismo patrón que lección 11 VERSE_SYNTAX_GUIDE — formalizado como lección 16). El parent class `creative_device` redirige el contexto de instanciación al runtime de UEFN (actor del nivel), absorbe la propagación de `<transacts>`. Acceso desde callers: `@editable Bus:event_bus_device = event_bus_device{}` (drag&drop la instancia en UEFN al editar el device consumidor). NO `using { /<ProjectName>/Generated/EventBusConstants }` directo. Path generado: `Content/Verse/Generated/EventBusDevice.verse`. **Razón aplicada**: alinea el diseño con la realidad de la API Verse v1 builtin (`event(t)` no implementa `subscribable`, validado runtime SPR-009 F-C-3a + Verse.digest), permite mantener type-safety compile-time de D-A8 sin refactorizar a map custom, mantiene la separación arquitectónica EventBus-fuera-de-Cores-singleton, y desbloquea SPR-010 (AdminCommands) que dependía de SPR-009. Coherente con D-A8 (EventBus type-safe via primitivas Verse). Implementación cerrada: HEAD `6c90e45` (F-C-3 commit cierre + 7 commits remote tras push política PM-RECOVERY-2026-05-08).
+
+#### Docs (resumen archivos tocados — 5 docs autoritativos modificados)
+- `BOOTSTRAP_PIPELINE.md` (§11.5 + §11.6 + §11.7 + §11.8 + preámbulo + §4.3 + §4.4 + §11.2 — 8 puntos en 3 commits L1a + L1c)
+- `API_REFERENCE_GENERATED.md` (§3.5 reescrita — L1b)
+- `VERSE_SYNTAX_GUIDE.md` (§1 lección 16 nueva + §3 2 filas tabla + cabecera contador 13→16 — L1b)
+- `CHANGELOG.md` (esta entrada — L2)
+- `GLOSSARY.md` (3 entradas reescritas/añadidas — L2)
+
+Pendientes lotes posteriores (no en este patch):
+- L3: `SPRINTS_BACKLOG.md` SPR-009 re-spec + `CONCEPT.md` SPR-009 done criteria + `MODULES_DEPENDENCY_GRAPH.md` §4.2 + §11.2 + §2.1 (lista Cores corregida con excepción EventBus).
+- L4: `TESTING_PROTOCOL.md` §2.1 (excepción D-A7 EventBus device) + §2.3 (plantilla Integration test al patrón Await loop) + línea 139 (path `EventBusDevice.verse` en lugar de `EventBusConstants`) + `PROMPT_TEMPLATES.md` "Crear test_device" (gap §10 Python tests).
+- L5: `FOLDER_STRUCTURE_TRUTH.md` regex Generated/ (rename excepción `EventBusConstants.verse` → `EventBusDevice.verse`) + `JSON_SCHEMAS.md` §42 verificación coherencia.
+- F-C-5: postmortem fase 2 (`docs/postmortems/PM-SPR-009-blocked.md`).
+- F-C-6: cierre SPR-009 + tag `SPR-009-resolved` + Daily Log.
+
+Schema de persistencia: **sin cambios**.
+
+---
+
 ### SPR-008 — PersistenceLayer (2026-05-08)
 
 > **Contexto**: implementación del 4º Core foundational del proyecto. 4 weak_maps persistentes (PlayerCore, PlayerInventory, PlayerProgress, PlayerEconomy) con patrón option-version oficial Epic 8/8/2025. 8 funciones públicas Load/Save con validación defensiva. Caso de estudio para §2.4 del VERSE_SYNTAX_GUIDE.
@@ -583,6 +632,8 @@ Tras corregir la sintaxis `weak_map[player]struct<persistable>` → `weak_map(pl
 
 ### Decisions
 - **D-A8 (Auditoría 2 — C3)**: el EventBus del proyecto se construye **componiendo** instancias `event(payload_t)` nativas de Verse, una por cada evento del catálogo `data/architecture/events_catalog.json`. NO es un map custom. NO usa string keys. NO usa `Payload:any`. La generación produce 2 archivos: `EventPayloads_Generated.verse` (structs payloads) + `EventBusConstants.verse` (singleton `EventBus` con propiedades `event(t)` tipadas). Type-safety garantizada por compilador. Cambios en payload struct → compile error inmediato en suscriptores (mejora vs el patrón runtime original). Soporte `await` nativo (las instancias `event(t)` son `awaitable`). **Razón aplicada**: alinea el diseño con primitivas Verse reales (sources oficiales Epic confirmadas), elimina string-magic, reduce LOC del bus de ~200 a ~9 (resto declarativo en JSON), y proporciona type-safety compile-time imposible en el plan original.
+
+> **Nota retroactiva (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution, 2026-05-09)**: D-A8 sigue válida en su **esencia** (composición de primitivas `event(t)` Verse, type-safety compile-time, no `Payload:any`, no string-magic). El **envoltorio cambió** post-implementación: en lugar de singleton top-level `EventBus<public> : event_bus_module = event_bus_module{}` con clase contenedora `event_bus_module := class<concrete>:`, ahora es `event_bus_device := class<concrete>(creative_device)` instanciado en Main.umap. Razón forzada: `event(t){}` top-level falla con err 3512 (lección 11/16 VERSE_SYNTAX_GUIDE). Adicionalmente, descubierto en F-C-3a que `event(t)` builtin Verse v1 = `class(signalable(t), awaitable(t))` SIN `subscribable` — los métodos `.Subscribe()` / `.Unsubscribe()` mencionados en este patch (3 ocurrencias en `### Changed` arriba) NO existen sobre instancias `event(t)` builtin. Patrón consumer canónico: `spawn { loop { Payload := Bus.<Evento>.Await() ; handler(Payload) } }` con `Sleep(0.0)` post-spawn. Decisión consolidada en D-A11 (sección Auditoría regresión bloque 5 — H4).
 
 ### Docs (resumen archivos tocados)
 - 6 docs autoritativos modificados para C3:
