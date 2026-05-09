@@ -2,11 +2,11 @@
 
 > **Fuente única de verdad** para sintaxis Verse moderna en este proyecto.
 > Cualquier doc autoritativo que contradiga este documento está OBSOLETO.
-> Última actualización: 2026-05-07 (SPR-211).
+> Última actualización: 2026-05-09 (SPR-009 F-C-4-L1b — lección 16 + sub-corolarios A-D, post-H4).
 
 ---
 
-## §1 Reglas inquebrantables (las 13 lecciones)
+## §1 Reglas inquebrantables (las 16 lecciones)
 
 ### Lección 1 — `<ProjectName>` placeholder LITERAL
 
@@ -153,6 +153,60 @@ SavePlayerCore<public>(P:player, D:PlayerCore_V1)<transacts>:void=
 ```
 
 El bloque `{}` vacío del `if` es intencional: no hace nada en éxito (la asignación ya ocurrió en la condición). En fallo improbable (key inválida), no se asigna y la función retorna sin error.
+
+### Lección 16 — `event(t){}` literal top-level dentro de module/file scope falla 3512
+
+`event(t)` es builtin Verse v1 (= `class(signalable(t), awaitable(t))`, ver `Verse.digest`). Construir una instancia `event(payload_t){}` como propiedad top-level (sea en file scope sin module wrapper, sea dentro de `module:`, sea como propiedad de `class<concrete>:` top-level sin `creative_device`) propaga `<transacts>` al contexto top-level `<computes>` puro y falla con err `3512`.
+
+**Mismo patrón que lección 11** (struct literal top-level), pero aplicado a la primitiva `event(t)`.
+
+```verse
+# ❌ ROMPE con err 3512 (validado SPR-009 F-B investigación H1-H3)
+LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+
+# ❌ ROMPE igual dentro de module: (no resuelve)
+LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+
+# ❌ ROMPE igual dentro de class<concrete>: top-level (sin creative_device parent)
+event_bus_module := class<concrete>:
+    LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+EventBus<public>:event_bus_module = event_bus_module{}
+
+# ✅ FUNCIONA — class<concrete>(creative_device) (validado SPR-009 F-C-2/F-C-3a)
+event_bus_device<public> := class<concrete>(creative_device):
+    LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+```
+
+**Razón**: `creative_device` parent class redirige el contexto de instanciación al runtime de UEFN (el actor del nivel), no al top-level Verse `<computes>`. La propagación de `<transacts>` desde la inicialización de `event(t){}` se absorbe en el lifecycle del device.
+
+**Implicación operativa**: el "EventBus singleton top-level" canonizado en versiones tempranas de los docs (BOOTSTRAP §11.5 v0, API §3.5 v0) **NO es viable**. Patrón vigente: `event_bus_device := class<concrete>(creative_device)` instanciado en Main.umap, referenciado desde otros devices vía `@editable Bus:event_bus_device`. Detalle en `BOOTSTRAP_PIPELINE.md` §11 (refactor F-C-4-L1 SPR-009).
+
+#### Sub-corolario A — `event(t)` builtin NO implementa `subscribable`
+
+En Verse v1 la primitiva `event<native>(t:type)<computes> := class(signalable(t), awaitable(t))` **NO incluye `subscribable`** (`Verse.digest`, validado runtime SPR-009 F-C-3a). Métodos `.Subscribe(handler)` / `.Unsubscribe(handler)` **no existen** sobre instancias `event(t)`. El único mecanismo de consumo es `Await()`.
+
+#### Sub-corolario B — patrón consumer canónico = `spawn{}` + `Await()` loop
+
+Sin `Subscribe`, el listener persistente se construye así:
+
+```verse
+OnBegin<override>()<suspends>:void=
+    spawn { ListenLevelUp() }
+    Sleep(0.0)  # OBLIGATORIO — ver sub-corolario C
+
+ListenLevelUp()<suspends>:void=
+    loop:
+        Payload := Bus.LevelUp.Await()
+        # ...handler logic...
+```
+
+#### Sub-corolario C — `Sleep(0.0)` post-`spawn{}` evita race silenciosa
+
+El task lanzado con `spawn{}` no entra en `Await()` instantáneamente — necesita ceder control al scheduler. Si el `Signal` ocurre antes de que el spawned task alcance la primitiva `Await()`, el evento se pierde **silenciosamente** (no hay queue interna). `Sleep(0.0)` cede el control y garantiza que el spawned task esté en `Await` cuando vuelva el flujo principal. Validado SPR-009 F-C-3a runtime debug.
+
+#### Sub-corolario D — `Signal()` es síncrono en Verse v1
+
+`Bus.<Evento>.Signal(payload)` resume **dentro** de la llamada a Signal todos los `Await` suspendidos pendientes, **antes** de que Signal retorne. NO es fire-and-forget asíncrono. Implicación: el orden de logs "Handler invoked" → "Step N — Signal emitted" demuestra ejecución sincrónica del handler. Validado SPR-009 F-C-3a.
 
 ---
 
@@ -334,6 +388,8 @@ OnPlayerSpawn(P:player):void=
 | Module function retorna tipo no `<public>` | `3593` | 7, 13 | Marcar tipo `<public>` |
 | `using { Verse.Core.PersistenceLayer }` (archivo sin module:) | `3506` + `3587` | 14 | `using { /lexosi@fortnite.com/RPG_Survival/Verse/Core }` (path a CARPETA) |
 | `set weak_map[K] = V` directo en `<transacts>` | `3512` ('decides effect not allowed') | 15 | Envolver en `if (set Map[K] = V) {}` |
+| `event(t){}` literal top-level / dentro module / dentro class<concrete>: sin creative_device | `3512` | 16 | `class<concrete>(creative_device)` con event(t) como propiedad |
+| `Bus.<Evento>.Subscribe(handler)` sobre `event(t)` builtin Verse v1 | unknown identifier | 16 | `spawn { loop { Payload := Bus.<Evento>.Await() ; handler(Payload) } }` + `Sleep(0.0)` post-spawn |
 
 ---
 

@@ -252,54 +252,72 @@ Logger.LogDebug("PlayerStats", "Recalculating stats for player {Player}")
 
 ---
 
-### 3.5 EventBus.verse + EventBusConstants.verse (generado)
+### 3.5 EventBusDevice.verse (generado)
 
-> **Arquitectura (C1 + C3)**: el EventBus operativo es un **singleton top-level generado** (`Generated/EventBusConstants.verse`) compuesto de instancias `event(payload_t)` nativas de Verse. Acceso por `using { /<ProjectName>/Generated/EventBusConstants }` y `using { /<ProjectName>/Generated/EventPayloads_Generated }`. NO usa strings. NO usa `Payload:any`.
+> **Arquitectura (C1 + C3 + H4)**: el EventBus operativo es un `creative_device` **generado** (`Generated/EventBusDevice.verse`) que compone instancias `event(payload_t)` nativas de Verse. Se instancia en Main.umap del proyecto y se referencia desde otros devices vía `@editable Bus:event_bus_device`. NO es singleton top-level (el patrón top-level falla con err 3512 — ver `VERSE_SYNTAX_GUIDE.md` §1 lección 16). NO usa strings. NO usa `Payload:any`.
 >
 > Source of truth del catálogo: `data/architecture/events_catalog.json` (schema en `JSON_SCHEMAS.md` §42). Plantilla y patrón en `BOOTSTRAP_PIPELINE.md` §11.
 
-#### EventBus:event_bus_module (singleton generado)
-**Ubicación**: `Content/Verse/Generated/EventBusConstants.verse`
-**Estado**: 🚧 Pendiente SPR-009 (Verse base) + extensión Python en SPR-004 (export catalog → Verse)
-**Descripción**: instancia top-level del bus. Acceso vía `using { /<ProjectName>/Generated/EventBusConstants }` y luego `EventBus.<NombreEvento>`.
+#### event_bus_device (class generada)
+**Ubicación**: `Content/Verse/Generated/EventBusDevice.verse`
+**Estado**: ✅ Implementado SPR-009 F-C-2 (2026-05-08)
+**Descripción**: clase `class<concrete>(creative_device)` con una propiedad `event(payload_t)` por cada entrada del catálogo. Se instancia en Main.umap. Acceso desde otros devices vía `@editable Bus:event_bus_device = event_bus_device{}` y luego `Bus.<NombreEvento>`.
 
-#### EventBus.<NombreEvento>:event(<nombre_evento>_payload)
-**Estado**: 🚧 Pendiente SPR-009
-**Descripción**: una propiedad por evento del catálogo. Cada propiedad es una instancia `event(t)` nativa de Verse, que implementa `signalable`, `awaitable` y `subscribable`. Lista completa de eventos en `MODULES_DEPENDENCY_GRAPH.md` §11.2.
-
-**Métodos disponibles en cada `event(t)` (provistos por Verse nativo, no por nosotros)**:
+**Declaración generada**:
 
 ```verse
-# Emitir evento (InPlayer es la referencia nativa Verse del jugador)
-EventBus.LevelUp.Signal(level_up_payload{
+event_bus_device<public> := class<concrete>(creative_device):
+    LevelUp<public>:event(level_up_payload) = event(level_up_payload){}
+    PlayerStatsChanged<public>:event(player_stats_changed_payload) = event(player_stats_changed_payload){}
+    # ... una por cada entrada del catálogo ...
+```
+
+#### Bus.<NombreEvento>:event(<nombre_evento>_payload)
+**Estado**: ✅ Disponible (SPR-009 F-C-2)
+**Descripción**: una propiedad por evento del catálogo. Cada propiedad es una instancia `event(t)` builtin Verse v1, equivalente a `class(signalable(t), awaitable(t))`. Lista completa de eventos en `MODULES_DEPENDENCY_GRAPH.md` §11.2.
+
+**Métodos disponibles en cada `event(t)` (provistos por Verse builtin, no por nosotros)**:
+
+```verse
+# Producer — emitir evento (SÍNCRONO: handlers Await resumen dentro de Signal antes de retornar)
+Bus.LevelUp.Signal(level_up_payload{
     Player := InPlayer
     OldLevel := 9
     NewLevel := 10
 })
 
-# Suscribirse (handler con firma tipada)
-EventBus.LevelUp.Subscribe(MyHandler)
+# Consumer — esperar próxima emisión (corutina suspende hasta Signal)
+Payload := Bus.LevelUp.Await()
+# Verse garantiza compile-time que Payload es level_up_payload.
+```
 
-MyHandler(Payload:level_up_payload):void=
-    # Payload.Player es player nativo — usable como key de weak_map directamente
-    Print("Player reached lvl {Payload.NewLevel}")
+**Patrón consumer canónico (loop persistente)**:
 
-# Cancelar suscripción
-EventBus.LevelUp.Unsubscribe(MyHandler)
+```verse
+# spawn{} encapsula corutina; loop{} mantiene listener vivo; Await() suspende.
+# Sleep(0.0) post-spawn es OBLIGATORIO — sin él, race condition (Signal antes de Await).
+OnBegin<override>()<suspends>:void=
+    spawn { ListenLevelUp() }
+    Sleep(0.0)
+    # ... resto OnBegin ...
 
-# Esperar evento (corutina suspende hasta emisión)
-Payload := EventBus.LevelUp.Await()
+ListenLevelUp()<suspends>:void=
+    loop:
+        Payload := Bus.LevelUp.Await()
+        Logger.LogInfo("AchievementEngine", "Player reached lvl {Payload.NewLevel}")
+        CheckLevelMilestones(Payload.Player, Payload.NewLevel)
 ```
 
 #### Payloads (structs generados)
 **Ubicación**: `Content/Verse/Generated/EventPayloads_Generated.verse`
-**Estado**: 🚧 Pendiente SPR-009
+**Estado**: ✅ Implementado SPR-009 F-C-2
 **Descripción**: un struct por cada evento. Campos públicos planos (sin anidación). Constructores con defaults para `int`, `float`, `string`, `logic`, arrays. Tipos `player`/`agent` requieren rellenarse en construcción.
 
 #### ❌ Funciones que NO existen (no implementar)
-- ~~`Subscribe(EventName:string, Handler:type{_(Payload:any):void}):void`~~ — `any` SÍ existe en Verse como supertipo opaco ([dev.epicgames.com — Any in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/any-in-verse): *"Verse has a special type, any, that is the supertype of all types"*) pero soporta operaciones muy limitadas y no encaja en handlers tipados de events. Sustituido por `EventBus.<Evento>.Subscribe(handler_tipado)` con struct payload concreto.
-- ~~`Emit(EventName:string, Payload:any):void`~~ — sustituido por `EventBus.<Evento>.Signal(payload_struct)`.
-- ~~`Unsubscribe(EventName:string, Handler:...)`~~ — sustituido por `EventBus.<Evento>.Unsubscribe(handler)`.
+- ~~`Subscribe(EventName:string, Handler:type{_(Payload:any):void}):void`~~ — `any` SÍ existe en Verse como supertipo opaco ([dev.epicgames.com — Any in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/any-in-verse): *"Verse has a special type, any, that is the supertype of all types"*) pero soporta operaciones muy limitadas y no encaja en handlers tipados de events. Sustituido por patrón consumer `spawn{}` + `Await()` loop.
+- ~~`Emit(EventName:string, Payload:any):void`~~ — sustituido por `Bus.<Evento>.Signal(payload_struct)`.
+- ~~`Bus.<Evento>.Subscribe(handler_tipado)`~~ — **NO existe en `event(t)` builtin Verse v1**. La primitiva implementa `signalable + awaitable` only, NO `subscribable`. Sustituido por `spawn { loop { Payload := Bus.<Evento>.Await() ; ... } }`. Validado runtime SPR-009 F-C-3a.
+- ~~`Bus.<Evento>.Unsubscribe(handler_tipado)`~~ — corolario de lo anterior. Para "desuscribir": salir del loop con `break` o terminar el `spawn` con condición.
 
 ---
 
