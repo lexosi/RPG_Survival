@@ -505,6 +505,8 @@ APIs públicas a testear (de API_REFERENCE_GENERATED.md):
 3. **Unit test 2**: [edge case]
 4. **Integration test (si aplica)**: interacción con [otro sistema]
 
+> **Si el sprint toca scripts/build/** (validador, exporter, transformer Python): adicionalmente crear test estático Python en `scripts/build/tests/test_<name>.py` siguiendo el patrón canónico de `TESTING_PROTOCOL.md` §10 (introducido SPR-009 F-C-3b). El test_device Verse y el test Python son complementarios: el primero valida runtime in-session, el segundo valida output del script en milisegundos sin UEFN abierto. Ejemplo de referencia: `scripts/build/tests/test_exporter_event_bus.py` (5 tests, fixture JSON, runtime ~0.13s, sin deps externas).
+
 ## Done Criteria
 - [ ] Archivo creado en `Content/Verse/Tests/test_device_SPRxxx.verse`
 - [ ] Compila sin warnings
@@ -514,6 +516,7 @@ APIs públicas a testear (de API_REFERENCE_GENERATED.md):
 - [ ] ManualTriggerButton para re-ejecutar
 - [ ] Cada test reporta ✅/❌ con razón
 - [ ] Final reporta total Passed/Failed
+- [ ] Si el sprint tocó `scripts/build/`: test Python adicional en `scripts/build/tests/test_<name>.py` con `python -m unittest scripts.build.tests.test_<name> -v` PASS (ver TESTING_PROTOCOL.md §10)
 
 ## Tu tarea
 1. Sigue plantilla TESTING_PROTOCOL.md sección 3.1

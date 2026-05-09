@@ -70,7 +70,9 @@
 ### 2.1 Smoke Test
 **Objetivo**: ¿se instancia sin crashear?
 
-> **Acceso a Core**: los 6 módulos Core (Logger, EventBus, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) son singletons top-level (decisión D-A7). Se acceden por `using { /<ProjectName>/Core/<Modulo> }`, **NO** por `@editable`. Las constantes/vars module-scoped que mantienen las instancias se inicializan al cargar el módulo Verse, antes de que el editor instancie cualquier `creative_device` y por tanto antes de que cualquier `OnBegin` corra (afirmación de proceso interno del proyecto — sin cita literal Epic sobre orden exacto module-init vs OnBegin; comportamiento consistente con cómo Verse describe module-scoped variables en [Constants and Variables in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/constants-and-variables-in-verse)). Detalle en `MODULES_DEPENDENCY_GRAPH.md` §2.1 + `API_REFERENCE_GENERATED.md` §3.
+> **Acceso a Core**: 5 de los 6 módulos Core (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) son singletons top-level (decisión D-A7). Se acceden por `using { /<ProjectName>/Core/<Modulo> }`, **NO** por `@editable`. Las constantes/vars module-scoped que mantienen las instancias se inicializan al cargar el módulo Verse, antes de que el editor instancie cualquier `creative_device` y por tanto antes de que cualquier `OnBegin` corra (afirmación de proceso interno del proyecto — sin cita literal Epic sobre orden exacto module-init vs OnBegin; comportamiento consistente con cómo Verse describe module-scoped variables en [Constants and Variables in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/constants-and-variables-in-verse)).
+>
+> **Excepción D-A11 (post-SPR-009 F-C resolution)**: **EventBus es un `creative_device`**, NO singleton top-level. El test_device que necesite emitir/consumir eventos accede al EventBus vía `@editable Bus:event_bus_device = event_bus_device{}` (drag&drop la instancia en UEFN al editar el test_device). Razón: `event(t){}` top-level falla con err 3512 (lección 16 VERSE_SYNTAX_GUIDE). Detalle en `MODULES_DEPENDENCY_GRAPH.md` §2.1 + §4.2 + `BOOTSTRAP_PIPELINE.md` §11 + `API_REFERENCE_GENERATED.md` §3.5.
 
 ```verse
 # /Content/Verse/Tests/test_device_SPR005.verse
@@ -130,6 +132,10 @@ test_device_SPR007 := class(creative_device):
 **Objetivo**: ¿dos sistemas interactúan bien?
 
 > **Acceso a Systems gameplay (Capa 2+)**: NO se inyectan por `@editable`. Se resuelven por lookup runtime vía `ModuleRegistry.GetPlayerStats()` (decisión D-A7 + workaround C2). Detalle en `MODULES_DEPENDENCY_GRAPH.md` §4.7.
+>
+> **Acceso a EventBus**: SÍ por `@editable Bus:event_bus_device = event_bus_device{}` (excepción D-A11 — EventBus es `creative_device`, no singleton top-level). Drag&drop la instancia de EventBusDevice del nivel en UEFN al instanciar el test_device.
+>
+> **Patrón consumer canónico**: `event(t)` builtin Verse v1 NO implementa `subscribable` — `.Subscribe(handler)` y `.Unsubscribe(handler)` **no existen**. Único mecanismo de consumo = `Await()`. Listener persistente = `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn + `ListenerFn()<suspends>:void= loop { Payload := Bus.<Evento>.Await() ; <handler>(Payload) }`. `Sleep(0.0)` post-spawn obligatorio (evita race Signal-antes-de-Await). `Signal()` síncrono. Detalle en `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
 
 ```verse
 # /Content/Verse/Tests/test_device_SPR011.verse
@@ -138,23 +144,23 @@ using { /Verse.org/Simulation }
 using { /UnrealEngine.com/Temporary/Diagnostics }
 using { /<ProjectName>/Core/Logger }
 using { /<ProjectName>/Core/ModuleRegistry }
-using { /<ProjectName>/Generated/EventBusConstants }
+using { /<ProjectName>/Generated/EventBusDevice }
 using { /<ProjectName>/Generated/EventPayloads_Generated }
 
 test_device_SPR011 := class(creative_device):
 
+    # Drag & drop la instancia de EventBusDevice del nivel en UEFN al editar este test_device.
+    @editable Bus:event_bus_device = event_bus_device{}
+
     var Received:logic = false
 
-    OnLevelUp(Payload:level_up_payload):void=
-        set Received = true
-        # Payload.Player es player nativo Verse — el Logger lo formatea por defecto.
-        Logger.LogInfo("test_device_SPR011", "Got level_up: {Payload.OldLevel}->{Payload.NewLevel}")
-
     OnBegin<override>()<suspends>:void=
-        # Test: cuando PlayerStats sube nivel, EventBus.LevelUp se dispara
+        # Test: cuando PlayerStats sube nivel, Bus.LevelUp se dispara
 
-        # Setup: subscribe handler tipado al evento generado
-        EventBus.LevelUp.Subscribe(OnLevelUp)
+        # Setup: spawn listener que escucha LevelUp en bucle hasta recibir
+        spawn { ListenLevelUp() }
+        Sleep(0.0)  # OBLIGATORIO — cede control al scheduler para que el spawned task entre en Await
+                    # ANTES de que se emita el primer Signal. Sin él, race condition silenciosa.
 
         # Obtener un player real del playspace (1er jugador conectado).
         # Patrón canónico Epic: Self.GetPlayspace().GetPlayers()[0].
@@ -172,11 +178,22 @@ test_device_SPR011 := class(creative_device):
             return
 
         # Assert
-        Sleep(0.5)  # esperar a que el evento se propague
+        Sleep(0.5)  # esperar a que el evento se propague (Signal síncrono, pero damos margen extra)
         if (Received?):
             Logger.LogInfo("test_device_SPR011", "✅ Integration PASS")
         else:
             Logger.LogError("test_device_SPR011", "❌ Integration FAIL: handler no recibió evento")
+
+    ListenLevelUp()<suspends>:void=
+        # Loop persistente. En este test solo necesitamos UNA emisión, pero el patrón
+        # canónico es loop{} para listener vivo. Salimos tras la primera asignación
+        # de Received para evitar que el spawned task se quede bloqueado en futuros tests.
+        loop:
+            Payload := Bus.LevelUp.Await()
+            # Payload.Player es player nativo Verse — el Logger lo formatea por defecto.
+            Logger.LogInfo("test_device_SPR011", "Got level_up: {Payload.OldLevel}->{Payload.NewLevel}")
+            set Received = true
+            break  # cerrar loop tras primera ocurrencia (test one-shot)
 ```
 
 ### 2.4 Persistence Test
