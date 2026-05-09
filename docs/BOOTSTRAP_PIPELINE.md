@@ -6,9 +6,9 @@
 > 1. **Datos** (`Companions_Generated.verse`, `Items_Generated.verse`, etc.) — generados desde JSONs de contenido.
 > 2. **Arquitectura** — generados desde JSONs declarativos en `data/architecture/`:
 >    - `ModuleRegistryConstants.verse` — desde `modules_manifest.json` para lookup runtime entre Systems gameplay sin reflexión Verse. Patrón completo en §10.
->    - `EventPayloads_Generated.verse` + `EventBusConstants.verse` — desde `events_catalog.json` para EventBus type-safe sobre `event(t)` nativo de Verse. Patrón completo en §11.
+>    - `EventPayloads_Generated.verse` + `EventBusDevice.verse` — desde `events_catalog.json` para EventBus type-safe sobre `event(t)` nativo de Verse. `EventBusDevice` es un `creative_device` (patrón H4 post-SPR-009 F-C-2 — `event(t){}` top-level falla con err 3512, ver `VERSE_SYNTAX_GUIDE.md` §1 lección 16). Patrón completo en §11.
 >
-> ⚠️ **Sintaxis Verse moderna (post-SPR-211)**: las plantillas de Verse generado en este doc fueron reescritas a Patrón 3 (struct `<public>` + module `<public>` + funciones getter `Get{Singular}{PascalCase}`). El patrón legacy `NAME := struct_def{...}` top-level falla con err 3512. Autoridad sintáctica vigente: `docs/VERSE_SYNTAX_GUIDE.md`. §10 (ModuleRegistry) y §11 (EventBus/EventPayloads) usan archetype constructors top-level que probablemente también requieran refactor a getter pattern; queda pendiente como parte del SPR siguiente que implemente cada uno (SPR-005 / SPR-009).
+> ⚠️ **Sintaxis Verse moderna (post-SPR-211)**: las plantillas de Verse generado en este doc fueron reescritas a Patrón 3 (struct `<public>` + module `<public>` + funciones getter `Get{Singular}{PascalCase}`). El patrón legacy `NAME := struct_def{...}` top-level falla con err 3512. Autoridad sintáctica vigente: `docs/VERSE_SYNTAX_GUIDE.md`. §10 (ModuleRegistry) usa archetype constructor top-level que probablemente requiera refactor a getter pattern; queda pendiente para SPR-005 implementación. **§11 (EventBus/EventPayloads) ya refactorizada (SPR-009 F-C-4-L1a, post-H4)**: el EventBus operativo es ahora `event_bus_device := class<concrete>(creative_device)` instanciado en Main.umap (`Generated/EventBusDevice.verse`), NO singleton top-level. Razón canonizada en `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
 
 ---
 
@@ -357,7 +357,7 @@ if __name__ == "__main__":
 | `Achievements_Generated.verse` | `data/progression/achievements.json` | `02_export_constants_to_verse.py` (función `export_achievements()`) |
 | `Localization_Generated.verse` | `data/theme/localization_keys.json` | `02_export_constants_to_verse.py` (función `export_localization()`) |
 | `ModuleRegistryConstants.verse` ⚙️ | `data/architecture/modules_manifest.json` | `02_export_constants_to_verse.py` (función `export_module_registry()` — ver §10 para spec completa) |
-| `EventBusConstants.verse` ⚙️ | `data/architecture/events_catalog.json` | `02_export_constants_to_verse.py` (función `export_event_bus()` — ver §11 para spec completa) |
+| `EventBusDevice.verse` ⚙️ | `data/architecture/events_catalog.json` | `02_export_constants_to_verse.py` (función `export_event_bus()` — device generado (creative_device) que expone propiedades event(t) tipadas; ver §11 para spec completa) |
 | `EventPayloads_Generated.verse` ⚙️ | `data/architecture/events_catalog.json` | `02_export_constants_to_verse.py` (función `export_event_payloads()` — ver §11 para spec completa) |
 | `BalanceCurves_Generated.verse` 📐 | `BALANCE_FORMULAS.md` (curvas tabuladas) | `02_export_constants_to_verse.py` (función `export_balance_curves()` — SPR-134) |
 | `Zones_Generated.verse` | `data/zones/zone_definitions.json` | `04_generate_zone_layouts.py` |
@@ -389,7 +389,7 @@ Ejemplos canónicos (ver `FOLDER_STRUCTURE_TRUTH.md` §4):
 
 **Excepciones** (sufijo distinto justificado — coherente con regex validador en `FOLDER_STRUCTURE_TRUTH.md` §8.2 línea 522):
 - `ModuleRegistryConstants.verse` — workaround del SPR-005 (Auditoría 2 — C1). Genera getters tipados estáticos para Systems registrables (Verse no soporta `<T>` runtime). Spec completa en §10. Decisión D-A10 en `CHANGELOG.md`.
-- `EventBusConstants.verse` — workaround del SPR-009 (Auditoría 2 — C3). Genera el singleton `EventBus` con propiedades `event(payload_t)` tipadas, una por entrada del catálogo. Spec completa en §11. Decisión D-A10 en `CHANGELOG.md`.
+- `EventBusDevice.verse` — workaround del SPR-009 (Auditoría 2 — C3 + H4 SPR-009 F-C-2). `class<concrete>(creative_device)` con propiedades `event(payload_t)` tipadas, una por entrada del catálogo. NO usa sufijo `_Generated` ni sufijo `Constants` (el archivo es un device, no constantes — naming refleja la naturaleza arquitectónica). Spec completa en §11. Decisiones D-A10 + D-A11 en `CHANGELOG.md`.
 
 > **Nota (Auditoría 3 — H3.5)**: solo estos 2 archivos son excepciones reales. `ThemeConstants_Generated.verse` **NO es excepción** — sí lleva sufijo `_Generated`; el prefijo `ThemeConstants` es solo el nombre semántico del contenido (constantes de tema). Pertenece a la regla normal `<Nombre>_Generated.verse`. La lista de excepciones canónica son ÚNICAMENTE los 2 de arriba.
 
@@ -1113,7 +1113,7 @@ Fuente: [forums.unrealengine.com — Multicast Delegate Equivalent in UEFN Verse
 | Generado | Contenido | Quién lo importa |
 |---|---|---|
 | `Generated/EventPayloads_Generated.verse` | Structs de payloads (uno por evento) | Tanto emisores como suscriptores (importan el struct para construir/leer payload) |
-| `Generated/EventBusConstants.verse` | `event_bus_module` con propiedades `event(payload_t)` + singleton `EventBus` | Cualquier módulo que emita o escuche eventos cross-system |
+| `Generated/EventBusDevice.verse` | `event_bus_device := class<concrete>(creative_device)` con propiedades `event(payload_t)` | Cualquier device que emita o escuche eventos cross-system, vía `@editable Bus:event_bus_device` (NO singleton top-level — patrón H4) |
 
 **Por qué dos archivos**: separación de responsabilidades. Los structs son datos puros, el bus es la composición de eventos. Un Systems puede importar solo los payloads que necesita sin arrastrar todo el bus si no quiere.
 
