@@ -236,7 +236,7 @@ El 80–90% del contenido entre mapas se intercambia con esto. El 10–20% resta
 | Leaderboard global | `leaderboard_device` muestra rankings; **datos cross-session vienen de Verse Persistence (weak_map), no del device** — Epic no expone API para listar jugadores fuera de sesión actual. Top-N se reconstruye comparando entradas de jugadores presentes + caché persistente. |
 | Notificaciones | `hud_message_device` (pool max 3, ver §7.4) + `popup_dialog_device` + custom widgets para overflow |
 | Códigos canjeables | Pre-pool grande compilado, activar manualmente |
-| Admin commands | `player_reference_device` configurado en UEFN editor con la cuenta admin + `AdminRef.IsRegistered[Agent]` en runtime. Verse NO expone identidad estable del jugador en su API pública (no existe `player.GetID()`/`GetName()`/`GetAccountID()` — fuente: dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player). |
+| Admin commands | `player_reference_device` configurado en UEFN editor con la cuenta admin + `AdminRef.IsReferenced[Agent]<transacts><decides>:void` en runtime (failable, llamar con `[]`). Verse NO expone identidad estable del jugador en su API pública (no existe `player.GetID()`/`GetName()`/`GetAccountID()` — fuente: dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player). Patrón canónico: `Core/AdminCommands` namespace stateless + `Devices/AdminPanel` device con `@editable AdminRefs` (cross-ref `VERSE_SYNTAX_GUIDE.md` §1 lección 17 + §2.4-bis). B1.1-fix SPR-010: la versión previa de esta fila mencionaba `IsRegistered` que era API ficticia; real es `IsReferenced`. |
 
 ### 5.5 Optimización móvil — reglas duras
 
@@ -1356,18 +1356,27 @@ Content/Verse/
 - **Sistema(s)**: SYS-070
 - **Dependencias**: SPR-006, SPR-008, SPR-009
 - **Tipo**: verse + ui
-- **Tiempo**: 2h
+- **Tiempo**: 2h estimado (real esperado 4-6h post-Step 0.5 investigación API)
 - **Archivos**:
   - `Content/Verse/Core/AdminCommands.verse`
   - `Content/Verse/Devices/AdminPanel.verse`
 - **Done**:
-  - [ ] Singleton top-level
-  - [ ] `AdminPanel.verse` declara `@editable AdminRefs:[]player_reference_device = array{}` (uno por cada cuenta admin, configurada en editor)
-  - [ ] `AdminCommands.IsAdmin(Agent:agent):logic` itera `AdminRefs` y devuelve true si alguno tiene `IsRegistered[Agent]`
-  - [ ] UI sólo visible si `AdminCommands.IsAdmin(Agent)` devuelve true. NO usar `player.GetID()` — no existe en la API Verse pública (fuente: dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player).
-  - [ ] Comandos: dar gemas, spawnear ayudante, completar quest, trigger evento
-  - [ ] Logging de acciones admin (incluye qué admin ejecutó qué comando, vía `AdminRefs[i]` matched index)
-- **Notas C1 + Auditoría retro Bloque 1**: AdminCommands NO depende de Registry. Usa Logger + PersistenceLayer + EventBus por `using {}` directo. **Identificación de admin por `player_reference_device`** (Auditoría retro B1.1) — `player.GetID()` no existe en Verse, identidad estable no expuesta. La asignación de quién es admin se hace en editor UEFN configurando los `player_reference_device` con las cuentas autorizadas, no en JSON.
+  - [ ] `Core/AdminCommands.verse` = namespace puro stateless (`AdminCommands<public> := module:`)
+  - [ ] `IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void` itera Refs + `if (Ref.IsReferenced[Agent]): return` / `fail` si ninguna match
+  - [ ] `Devices/AdminPanel.verse` declara `admin_panel_device := class<concrete>(creative_device)` con `@editable AdminRefs:[]player_reference_device = array{}`
+  - [ ] State (Refs) vive en device instance, NO top-level (lección 5: `var` top-level SOLO `weak_map`)
+  - [ ] `AdminPanel.OnBegin` consume `AdminCommands.IsAdmin[AdminRefs, Agent]` con `if`/`<decides>` propagado
+  - [ ] UI sólo visible si `IsAdmin[AdminRefs, Agent]` succeeds
+  - [ ] Smoke test in-session PASS: admin Ref configurado → UI visible / sin Ref → UI invisible
+  - [ ] Mobile Preview NO crashea
+  - [ ] Build UEFN sin warnings
+- **Notas C1 + Auditoría retro Bloque 1 + B1.1-fix (SPR-010 L1-L4)**:
+  - Identificación admin via `player_reference_device` configurado en editor UEFN. NO existe device dedicado a auth/admin en API Fortnite vigente (build 40.30-CL-53276632) — único mecanismo posible.
+  - API real `player_reference_device`: `IsReferenced[Agent]<transacts><decides>:void` (NO `IsRegistered` que era API ficticia canonizada en B1.1 original). `Register(Agent):void`, `Clear():void` (no unregister selectivo), `GetAgent():?agent`, `AgentUpdatedEvent:listenable(agent)` subscribable. Fuente empírica + cross-refs en `API_REFERENCE_GENERATED.md` §3.7 + `VERSE_SYNTAX_GUIDE.md` lección 17.
+  - Patrón canónico: Core stateless + Device state-bearing (`VERSE_SYNTAX_GUIDE.md` §2.4-bis). NO `Init(Refs)` requirement — Refs se pasa como param a las funciones.
+  - Trampa documentar: `Activate()` ends round/game, NO activate-reference.
+  - Trampa documentar: `Clear()` limpia state device entero, NO unregister selectivo. Multi-admin → 1 device por admin permanente.
+  - Lección de proceso P5 derivada: auditorías retroactivas DEBEN incluir validación empírica (build real + Verse.digest). B1.1 original falló porque "API_REFERENCE.md decía X" se asumió correcto sin verificar empíricamente. Canonizar P5 en CHANGELOG L3.
 
 ### 13.4 Backlog Fase 1 — MVP playable (extracto, ~40 sprints)
 

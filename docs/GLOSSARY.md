@@ -426,7 +426,22 @@ DeepSeek V4-Pro/Flash. Escribe código Verse/Python rutinario, JSONs masivos, co
 El humano. Mueve archivos entre IAs y UEFN, ejecuta Build/Push, testea in-session, decide cuándo escalar, mantiene Daily Log.
 
 ### Admin (player ID)
-Jugador autorizado a comandos admin. **La API Verse de `player` NO expone getter de identidad estable** — no existen `GetID()`, `GetName()` ni `GetAccountID()` (fuente oficial: [dev.epicgames.com — verse-api/versedotorg/simulation/player](https://dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player), único método público documentado: `IsActive[]`). Identificación se hace vía uno o varios `player_reference_device` configurados en editor UEFN con las cuentas admin, comprobando `AdminRef.IsRegistered[Agent]` en runtime. `data/admin/admin_config.json` lleva el catálogo de comandos y metadata; **NO** lleva la lista de IDs de jugador. Decisión cerrada Auditoría retrospectiva Bloque 1 (sustituye al patrón previo `player.GetID() == ADMIN_ID` que era inválido).
+
+Identificación de admin del proyecto via uno o varios `player_reference_device` configurados en editor UEFN. NO existe device nativo dedicado a auth/admin en API Fortnite vigente (build 40.30-CL-53276632). `player_reference_device` es el único mecanismo posible. La API Verse pública de `player` no expone `GetID()`/`GetName()`/`GetAccountID()` (fuente: [dev.epicgames.com — player class](https://dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player) + [feature request abierta](https://forums.unrealengine.com/t/feature-request-get-player-name-in-verse/1378109) sin implementar desde nov 2023).
+
+**Mecanismo runtime**: `player_reference_device.IsReferenced[Agent]<transacts><decides>:void` (failable, `[]`). Iterar array de refs:
+
+```verse
+IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+    for (Ref:Refs):
+        if (Ref.IsReferenced[Agent]):
+            return
+    fail
+```
+
+**Configuración editor UEFN**: dev coloca `Player Reference Device` en mapa por cada admin permanente (1:1), configura account IDs Epic admin en cada device, drag&drop al `@editable AdminRefs:[]player_reference_device` del `admin_panel_device`. `data/admin/admin_config.json` NO almacena IDs (eliminado en B1.1).
+
+**B1.1-fix SPR-010 L2**: la entrada original mencionaba `IsRegistered` que es API ficticia. Real es `IsReferenced`. Detalles + cross-refs en `API_REFERENCE_GENERATED.md` §3.7, `VERSE_SYNTAX_GUIDE.md` §1 lección 17 + §2.4-bis, `CONCEPT.md` §13.3 SPR-010.
 
 ### Cuenta-test
 Cuenta de Epic dedicada a testear cambios de schema o features delicadas. Tener al menos UNA cuenta-test con datos previos para validar updates.
