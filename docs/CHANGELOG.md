@@ -272,6 +272,63 @@ Validadas con build UEFN real. Lista completa en `VERSE_SYNTAX_GUIDE.md` §1. Re
 
 ---
 
+### Auditoría retrospectiva — B1.1-fix (SPR-010 L1-L4, 2026-05-10)
+
+> **Contexto**: cierre F0 SPR-010 (AdminCommands + AdminPanel). Pre-flight detectó drift estructural (TRUTH-fix commit `012f6ac`). Step 0 throwaway build UEFN FAIL reveló que la API canonizada en B1.1 original es ficticia. Investigación Step 0.5 contra `Fortnite.digest.verse` cache UEFN local (build `++Fortnite+Release-40.30-CL-53276632`) cross-validada con foro Epic Nov 2024 capturó la API real.
+
+#### Fixed
+
+**B1.1-fix corrige API ficticia canonizada en B1.1 original**. 5 docs autoritativos del proyecto contenían referencias a métodos que NO existen en `player_reference_device`:
+
+| Doc | API ficticia | API real | Lote fix |
+|---|---|---|---|
+| `API_REFERENCE_GENERATED.md` §3.7 | `IsRegistered`, `Init(Refs)` con state interno, `IsAdmin(Agent:agent):logic` | `IsReferenced<transacts><decides>:void` con `[]`, namespace stateless, `IsAdmin(Refs, Agent)<transacts><decides>:void` | L1 (commit `7617b73`) |
+| `VERSE_SYNTAX_GUIDE.md` | (no contenía la API ficticia, sí faltaba lección 17) | Lección 17 nueva + §2.4-bis | L1 (commit `7617b73`) |
+| `CONCEPT.md` §5.4 + §13.3 SPR-010 | `IsRegistered`, singleton top-level | `IsReferenced`, namespace stateless + Device state-bearing | L2 (commit `d61d2df`) |
+| `GLOSSARY.md` "Admin (player ID)" | `IsRegistered` | `IsReferenced` con ejemplo Verse | L2 (commit `d61d2df`) |
+| `MODULES_DEPENDENCY_GRAPH.md` §4.6 | "singleton top-level. Mismo patrón que Logger" | Namespace puro stateless. State en Device. Cross-ref §2.4-bis | L3 (este commit) |
+| `JSON_SCHEMAS.md` §37 | `IsRegistered` | `IsReferenced` | L3 (este commit) |
+
+#### Trampas documentadas (nuevas, no en B1.1 original)
+
+- `Activate():void` en `player_reference_device` ends round/game, NO activate-reference. Trampa semántica documentar prominent.
+- `Clear():void` limpia state device entero, NO unregister selectivo. Multi-admin → 1 device por admin permanente.
+- `IsReferenced[Agent]` propaga `<transacts><decides>` al caller — caller necesita ambos specifiers o consumir con `if`/`<decides>`.
+- `listenable(t)` de devices nativos SÍ implementa `subscribable` (`.Subscribe(handler)` válido). Distinto de `event(t)` custom (lección 16) que NO es subscribable. Corolario nuevo en lección 17.
+
+#### Confirmado (B1.1-fix valida)
+
+- D-A13 (identificación admin via `player_reference_device`): vigente. NO existe device dedicado a auth/admin en API Fortnite (búsqueda exhaustiva contra Verse.digest 40.30 sobre `account|auth|admin|whitelist|permission|role`). Único mecanismo posible.
+- API Verse `player` no expone identidad estable serializable (confirmado nuevamente).
+
+#### Lección de proceso P5 (nueva, canonizar)
+
+> **P5 — Validación empírica obligatoria en auditorías retroactivas sobre API**
+
+Auditorías retroactivas que canonicen comportamiento de API (e.g. método X de device Y existe con firma Z) DEBEN incluir validación empírica antes de canonizar:
+
+1. Throwaway aislado (`Tests/canary/throwaway_<topic>.verse`) usando la API propuesta.
+2. Build UEFN local PASS confirmado.
+3. Si build FAIL → investigar contra `Verse.digest` local (`%LOCALAPPDATA%\UnrealEditorFortnite\Saved\VerseProject\<project>\<module>\<module>.digest.verse`) ANTES de canonizar.
+4. Cross-validar con docs Epic oficiales + foros si aplica.
+
+**Por qué importa**: B1.1 original canonizó API ficticia porque "API_REFERENCE.md decía X" se asumió correcto sin verificar empíricamente. Resultado: 5 docs autoritativos requirieron refactor (4 lotes, ~295 líneas) cuando se descubrió en SPR-010 Step 0.
+
+**Aplicación a auditorías futuras**: cualquier "Auditoría retrospectiva — Bloque N" que toque firmas API debe incluir bullet "✅ Throwaway build PASS confirmado" en su Done criteria. Sin throwaway PASS empírico, la auditoría es preliminar, no canónica.
+
+#### Decisions
+
+- **D-A11.1 (B1.1-fix corolario, SPR-010)**: AdminCommands aplica patrón "Core stateless + Device state-bearing" (segundo precedente §2.4-bis tras PersistenceLayer §2.4). NO singleton top-level con state — falla lección 5. Es la respuesta canónica del proyecto a "Core que necesita state mutable no-weak_map".
+- **D-A13 (Auditoría retro Bloque 1, vigente confirmado por B1.1-fix)**: identificación admin via `player_reference_device` configurado en editor UEFN. Único mecanismo posible (no existe `account_device` en build 40.30).
+
+#### Notas operativas
+
+- Step 0 SPR-010 throwaway hash: `508bd8e5e178b2acecc74b6147aa8e26c581a209551b3828ad89183a179ae62d` (build FAIL anchor evidencia).
+- Tiempo invertido: pre-flight TRUTH-fix (~45min) + Step 0 throwaway + investigación (~1.5h) + L1 (~30min) + L2 (~30min) + L3 (~30min) + L4 pendiente. Total estimado SPR-010 con B1.1-fix: 6-8h vs estimado original 2h. Fracción atribuible a P5 ausente: ~4-5h.
+- Patrón compatible con strategy "verse-uefn-handbook" (HANDOFF 2026-05-10 §📚 Decisión Estratégica): la entrada B1.1-fix + lección P5 es candidato directo para `verse-uefn-handbook/recipes/admin_commands_pattern/` + `verse-uefn-handbook/meta/HOW_TO_VALIDATE_PRIMITIVE.md`.
+
+---
+
 ### Auditoría retrospectiva — Bloque 5 (mayo 2026, pre-flight SPR-001 dry-run)
 
 #### Fixed
@@ -475,6 +532,8 @@ Tras corregir la sintaxis `weak_map[player]struct<persistable>` → `weak_map(pl
 - Schema de persistencia: **sin cambios** (la persistencia ya usaba `player` nativo, FP4 verificado).
 - Schema events_catalog.json: **estructura sin cambios** (los tipos `"player"`/`"agent"` ya estaban permitidos en §42.2). Solo cambia el contenido del catálogo runtime al regenerar.
 - Pendiente: validar Bloque 2 cuando el usuario confirme.
+
+> **⚠️ B1.1-fix (SPR-010 L1-L4, 2026-05-10)**: La entrada B1.1 original arriba canonizó API ficticia (`IsRegistered`, `Init(Refs)` con state top-level, firma `IsAdmin(Agent):logic` sin Refs param). Validación empírica SPR-010 Step 0 build UEFN FAIL (err 3502 + err 3506) reveló que la API real es distinta. La corrección completa vive en CHANGELOG entrada **B1.1-fix** (más arriba, sección Auditorías retrospectivas). Lección de proceso derivada: P5 (validación empírica obligatoria en auditorías retroactivas).
 
 ---
 

@@ -309,8 +309,47 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 ### 4.6 `Core/AdminCommands.verse` (SYS-070, SPR-010)
 
 - 📤 Deps: `Logger` 🔒, `PersistenceLayer` 🔒, `EventBus` 🔒
-- 📥 Consumidores: `Devices/AdminPanel`, `EventManager` (admin abuse)
-- 🏗️ **Arquitectura**: singleton top-level. Mismo patrón que Logger (§4.1).
+- 📥 Consumidores: `Devices/AdminPanel` (state owner), `EventManager` (admin abuse logging)
+- 🏗️ **Arquitectura (B1.1-fix SPR-010)**: namespace puro stateless (`AdminCommands<public> := module:`). NO singleton top-level con state — `var Refs:[]player_reference_device` top-level falla por lección 5 (var top-level SOLO weak_map). State (array de refs) vive en `admin_panel_device` (`@editable AdminRefs:[]player_reference_device = array{}`). `AdminCommands` recibe Refs como param a todas sus funciones públicas. Patrón canónico = "Core stateless + Device state-bearing" (`VERSE_SYNTAX_GUIDE.md` §2.4-bis, segundo precedente tras PersistenceLayer §2.4).
+
+#### Funciones públicas (firmas reales post-B1.1-fix)
+
+```verse
+AdminCommands<public> := module:
+
+    IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void
+    IsAdminLogic<public>(Refs:[]player_reference_device, Agent:agent):logic
+    ExecuteCommand<public>(Refs:[]player_reference_device, Agent:agent, Command:string, Args:[]string):void
+```
+
+- `IsAdmin[Refs, Agent]` itera Refs + `if (Ref.IsReferenced[Agent])` → succeeds si alguna match, fail si ninguna.
+- `IsAdminLogic` wrapper non-failable (consume `<decides>` con if).
+- `ExecuteCommand` valida IsAdmin antes de ejecutar; si fail, loguea intento + ignora silenciosamente.
+
+#### API real `player_reference_device` (referenced device, build 40.30-CL-53276632)
+
+| Miembro | Firma |
+|---|---|
+| `IsReferenced(Agent:agent)<transacts><decides>:void` | failable, `[]` |
+| `Register(Agent:agent):void` | regular |
+| `Clear():void` | ⚠️ NO unregister selectivo |
+| `Activate():void` | ⚠️ TRAMPA: ends round/game |
+| `GetAgent():?agent` | regular |
+| `AgentUpdatedEvent:listenable(agent)` | subscribable |
+
+Detalle completo: `API_REFERENCE_GENERATED.md` §3.7. Sintaxis canónica + corolario `listenable(t)` subscribable: `VERSE_SYNTAX_GUIDE.md` §1 lección 17 + §2.4-bis.
+
+#### Por qué NO existe device dedicado a auth/admin
+
+Verse.digest 40.30-CL-53276632 búsqueda exhaustiva confirmó: no existe `account_device`, no existe device con nombre `auth/admin/whitelist/permission/role`. `player_reference_device` + `IsReferenced` es el ÚNICO mecanismo posible. D-A13 vigente.
+
+#### Drift previo eliminado (B1.1-fix)
+
+La versión original §4.6 mencionaba "singleton top-level. Mismo patrón que Logger (§4.1)" + APIs ficticias `IsRegistered`/`Init(Refs)` con state interno. Falla por:
+- Lección 5: `var` top-level SOLO `weak_map` (err 3502 confirmado SPR-010 Step 0).
+- API ficticia: `IsRegistered` no existe en `player_reference_device`. Real es `IsReferenced`. Confirmado contra Verse.digest local.
+
+Cross-ref: `CHANGELOG.md` entrada B1.1-fix L3 (lección P5).
 
 ### 4.7 `Core/ModuleRegistry.verse` (SYS-072, SPR-005)
 
