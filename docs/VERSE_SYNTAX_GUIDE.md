@@ -2,11 +2,11 @@
 
 > **Fuente única de verdad** para sintaxis Verse moderna en este proyecto.
 > Cualquier doc autoritativo que contradiga este documento está OBSOLETO.
-> Última actualización: 2026-05-10 (SPR-010 L1 B1.1-fix — lección 17 API real `player_reference_device` + corolario `listenable(t)` subscribable + §2.4-bis Core stateless + Device state-bearing).
+> Última actualización: 2026-05-10 (SPR-010 L1 B1.1-fix — lección 17 API real `player_reference_device` + corolario `listenable(t)` subscribable + §2.4-bis Core stateless + Device state-bearing + L4 lecciones 18/19/20 — return/fail en `<decides>` + Print no_rollback + var-mutating `:logic` propaga no_rollback).
 
 ---
 
-## §1 Reglas inquebrantables (las 17 lecciones)
+## §1 Reglas inquebrantables (las 20 lecciones)
 
 ### Lección 1 — `<ProjectName>` placeholder LITERAL
 
@@ -249,6 +249,115 @@ IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>
 `Clear()` NO sirve para remove individual: limpia el device entero. Solución = 1 device por admin permanente.
 
 **Lección de proceso P5 (canonizar en CHANGELOG L3)**: auditorías retroactivas sobre API DEBEN validar contra `Verse.digest` + build real. B1.1 SPR-010 falló porque "API_REFERENCE.md decía X" se asumió correcto sin verificar empíricamente.
+
+> **⚠️ Errata lección 17 (auto-flagged en L4 final)**: el ejemplo de patrón canónico de arriba usa `return`/`fail` que lección 18 demuestra empíricamente que NO existen en `<decides>`. El patrón correcto canónico Epic-confirmed es option-wrapper con `for` failable + `var Found:logic` + propagation con `?` (ver lección 18 abajo + throwaway v5 PASS L4). Este ejemplo pseudo-código de lección 17 sobrevive como evidencia de la API ficticia pre-L4. NO usar como referencia de implementación — usar lección 18.
+
+### Lección 18 — `return`/`fail` keywords NO existen en `<decides>` functions
+
+Validado empíricamente SPR-010 L4 throwaway v2 (build UEFN FAIL: err 3535 "Explicit return out of a failure context is not allowed" + err 3506 "Unknown identifier `fail`"). Confirmado por Epic staff (UltimateLambda, [foro May 2023](https://forums.unrealengine.com/t/has-anyone-successfully-written-a-failable-function-in-verse/1160379)).
+
+**Razón Epic-confirmed**: lenient evaluation reordering compatibility. Verse permite reordering de statements si no afecta semántica. Si `return`/`break` existieran en failure contexts, el reordering observablemente cambiaría el output (e.g. `return` vs `fail` ambiguous). Verse prohibe combinar continuation-style `return`/`break` con `<decides>` effect.
+
+**Patrón canónico para "succeeds if any match"** (option-wrapper):
+
+```verse
+# ✅ Patrón canónico Verse para iteración failable que succeeds si alguna match
+IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+    var Found:logic = false
+    for (Ref:Refs, Ref.IsReferenced[Agent], not Found?):
+        set Found = true
+    Found?
+```
+
+`for` con 3 cláusulas: iterator + failable filter + short-circuit condition. Si filter succeeds y short-circuit succeeds → `set Found = true` (mutación SÍ válida en `<transacts>` propagado). Final `Found?` propaga decides — succeeds si Found=true, fail si false.
+
+**Patrón equivalente con anti-Pattern proof**:
+
+```verse
+# ❌ FALLA con err 3535 + 3506
+IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+    for (Ref:Refs):
+        if (Ref.IsReferenced[Agent]):
+            return  # err 3535
+    fail  # err 3506
+```
+
+### Lección 19 — `Print()` tiene `no_rollback` effect — NO usable en failure contexts
+
+Validado empíricamente SPR-010 L4 throwaway v4 (build UEFN FAIL: err 3512 "This invocation calls a function that has the 'no_rollback' effect, which is not allowed by its context"). Confirmado por Epic staff (Incredulous_Hulk, [foro Apr 2023](https://forums.unrealengine.com/t/use-print-in-function-that-uses-specifiers/1013005)) + [doc oficial no-rollback](https://dev.epicgames.com/documentation/en-us/fortnite/no-rollback).
+
+**Implicación**: `Print()` directo NO se puede invocar dentro de:
+- `if` con condición failable (`if (X[]):`, `if (Y?):`)
+- `decides` functions
+- Cualquier failure context
+
+```verse
+# ❌ FALLA con err 3512
+if (IsAdmin[Refs, Agent]):
+    Print("Es admin")  # Print = no_rollback, contexto failable = err 3512
+```
+
+**Patrón canónico Epic-confirmed**: usar `log_channel` + `log` instance + `log.Print()`:
+
+```verse
+# ✅ Patrón canónico para print en contextos restrictivos
+my_log_channel := class(log_channel){}
+
+my_device := class(creative_device):
+    Logger:log = log{ Channel := my_log_channel }
+
+    MyMethod()<transacts>:void=
+        Logger.Print("Algo pasó")  # Funciona en <transacts>, <varies>, etc.
+
+    OnSomeFailable<override>()<suspends>:void=
+        if (IsAdmin[Refs, Agent]):
+            Logger.Print("Es admin")  # ✅ funciona desde failure context vía Logger.Print
+```
+
+**Workaround simple para throwaways/debugging**: separar el check failable del Print. Print fuera del failure context, almacenando resultado en var antes:
+
+```verse
+var IsAdminResult:logic = false
+if (IsAdmin[Refs, Agent]):
+    set IsAdminResult = true
+# Fuera del if, contexto no-failable, Print legal:
+if (IsAdminResult?):
+    Print("Es admin")
+```
+
+(Aunque `IsAdminResult?` técnicamente reabre failure context — para casos serios usar Logger.Print.)
+
+**Implicación arquitectónica para el proyecto**: el módulo `Logger.verse` (SPR-006) usa actualmente `Print()` directo, lo cual restringe su uso a contextos no-failable. Si Cores futuros necesitan logging desde failure contexts → migrar `Logger` a `log_channel` pattern. Pendiente decisión post-F0.
+
+### Lección 20 — Funciones `:logic` que mutan `var` propagan `no_rollback`
+
+Validado empíricamente SPR-010 L4 throwaway v3 (build UEFN FAIL: err 3512 "no_rollback effect not allowed" en llamada `IsAdminLogic(...)` desde `OnBegin<override>()<suspends>`).
+
+**Mecánica**: una función `:logic` non-failable que muta `var` local con `set`:
+
+```verse
+# ❌ Genera no_rollback effect implícito
+IsAdminLogic<public>(Refs:[]player_reference_device, Agent:agent):logic=
+    var Found:logic = false
+    for (Ref:Refs):
+        if (Ref.IsReferenced[Agent]):
+            set Found = true
+    Found
+```
+
+`<transacts>` permite mutación de var SI todo el path es rollbackeable. Si la función carece de `<transacts>` declarado, la mutación introduce `no_rollback` effect implícito al return type. Llamarla desde contexto que requiere transacts (e.g. `creative_device.OnBegin`) falla con err 3512.
+
+**Patrón canónico**: wrapper trivial sobre la versión failable, sin var/set:
+
+```verse
+# ✅ Wrapper non-failable trivial
+IsAdminLogic<public>(Refs:[]player_reference_device, Agent:agent):logic=
+    if (IsAdmin[Refs, Agent]) { true } else { false }
+```
+
+`if` failable consume `<decides>` propagado. Branches `{true}`/`{false}` son literals, no mutación. Sin no_rollback. Compila desde cualquier contexto.
+
+**Regla derivada**: si tienes una versión failable `<decides>` de algo, el wrapper `:logic` debe ser trivial sobre ella, no reimplementar la lógica con var. La failable es source of truth, la non-failable es proyección.
 
 ---
 
