@@ -35,6 +35,9 @@
 | Markdown | `SCREAMING_SNAKE.md` | `CONCEPT.md`, `SYSTEMS_INDEX.md` |
 | Devices | `PascalCase.verse` | `BasePlot.verse` |
 | Daily logs | `DL_YYYY-MM-DD_SPR-<tokens>_<autor>.md` (regex `^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$`) | `DL_2026-05-06_SPR-001+FIX1_lexosi.md`, `DL_2026-05-06_SPR-001+FIX1+002_lexosi.md` |
+| Postmortems | `PM-<id>.md` (regex `^PM-[A-Za-z0-9_-]+\.md$`) — solo en `docs/postmortems/`. Permite mayús/minús/dígitos/`-`/`_`. Ver §6.3 | `PM-SPR-009-blocked.md`, `PM-RECOVERY-2026-05-08.md`, `PM-SPR-211.md` |
+| Tests Verse | `test_<snake>.verse` (regex `^test_[A-Za-z0-9_]+\.verse$`) — solo en `Content/Verse/Tests/`. Permite mayús en sufijos tipo `_SPR008`. Ver §4.2 | `test_event_bus_smoke.verse`, `test_persistence_SPR008.verse` |
+| Tests pytest | `test_<snake>.py` o `__init__.py` (regex `^test_[a-z][a-z0-9_]*\.py$\|^__init__\.py$`) — solo en `scripts/build/tests/`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case JSON). Ver §5.2 | `test_exporter_event_bus.py`, `__init__.py`, `fixtures/event_bus_expected_contract.json` |
 
 > **Nota sobre excepciones de Verse generado (Auditoría 3 — H3.6 + Auditoría regresión bloque 5 — H4 SPR-009)**: la lista de excepciones canónicas son ÚNICAMENTE `ModuleRegistryConstants.verse` y `EventBusDevice.verse` (decisiones D-A10 + D-A11, Auditoría 2 — C1+C3 + Auditoría regresión bloque 5 — H4). El nombre anterior `EventBusConstants.verse` queda obsoleto post-F-C-2 SPR-009 — el archivo se renombró a `EventBusDevice.verse` reflejando que el patrón vigente es `event_bus_device := class<concrete>(creative_device)` (no singleton top-level con `event_bus_module`). Verdad operativa en la regex de §8.2 línea 522. Coherente con `BOOTSTRAP_PIPELINE.md` §4.4 + `VERSE_SYNTAX_GUIDE.md` §1 lección 16. Cualquier otro archivo en `Generated/` DEBE llevar sufijo `_Generated`.
 
@@ -343,12 +346,14 @@ Content/Verse/
 │       ├── IdleSummaryUI.verse              ← SYS-054
 │       └── CraftingUI.verse                 ← SYS-004 ⭐ NUEVO (faltaba en `CONCEPT.md` §11.2)
 │
-└── Devices/                                 ← Verse devices instanciables en UEFN editor
-    ├── GameManager.verse                    (root device, entry point: orquesta Init de Systems en OnBegin)
-    ├── ZonePortal.verse                     ← SYS-007
-    ├── HourlyBossTrigger.verse              ← SYS-042
-    ├── BasePlot.verse                       ← SYS-005
-    └── AdminPanel.verse                     ← SYS-070
+├── Devices/                                 ← Verse devices instanciables en UEFN editor
+│   ├── GameManager.verse                    (root device, entry point: orquesta Init de Systems en OnBegin)
+│   ├── ZonePortal.verse                     ← SYS-007
+│   ├── HourlyBossTrigger.verse              ← SYS-042
+│   ├── BasePlot.verse                       ← SYS-005
+│   └── AdminPanel.verse                     ← SYS-070
+│
+└── Tests/                                   ← smoke tests Verse (ver §4.2)
 ```
 
 ### 4.1 Resumen Verse
@@ -369,9 +374,17 @@ Content/Verse/
 | `Systems/Social/` | 3 |
 | `Systems/UI/` | 8 |
 | `Devices/` | 5 |
-| **TOTAL** | **83 archivos `.verse`** |
+| `Tests/` | N (smoke tests, ver §4.2) |
+| **TOTAL** | **83 archivos `.verse` runtime + N smoke tests** |
 
 > §11.2 del CONCEPT enumeraba 60 archivos. Este árbol añade 3 que faltaban: `DayNightCycle.verse`, `AchievementEngine.verse`, `CraftingUI.verse`. El resto de los 20 nuevos son archivos `Generated/` adicionales (ver `BOOTSTRAP_PIPELINE.md` para por qué hacen falta).
+
+### 4.2 Carpeta `Content/Verse/Tests/`
+
+- **Propósito**: smoke tests Verse en runtime UEFN (no son tests unitarios — UEFN no expone framework). Verifican wiring crítico: bus de eventos vivo, persistencia idempotente, etc.
+- **Naming canónico**: `test_<snake>.verse` — regex `^test_[A-Za-z0-9_]+\.verse$` (mayús permitidas en sufijos tipo `_SPR008` para trazabilidad cross-sprint).
+- **Validador (§8)**: trata `Content/Verse/Tests/` como zona regulada con regla `Verse_tests` propia. Archivos que matchean el regex se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
+- **Archivos actuales**: `test_event_bus_smoke.verse` (SPR-009 F-C smoke EventBus), `test_persistence_SPR008.verse` (SPR-008 persistencia idempotente).
 
 ---
 
@@ -389,7 +402,8 @@ scripts/
 │   ├── 04_generate_zone_layouts.py          ← SPR-041 (Poisson disk)
 │   ├── 05_apply_theme_pack.py               ← SPR-170 (bulk swap)
 │   ├── 06_check_memory_budget.py            ← SPR-136
-│   └── 07_run_full_pipeline.py              ← SPR-174 (orquestador)
+│   ├── 07_run_full_pipeline.py              ← SPR-174 (orquestador)
+│   └── tests/                               ← golden contract pytest tests (ver §5.2)
 │
 ├── tools/                                   ← scripts ad-hoc, sin orden
 │   ├── balance_curve_visualizer.py          ← from BALANCE_FORMULAS.md
@@ -399,6 +413,9 @@ scripts/
 │   ├── localization_exporter.py             ← (TBD)
 │   └── texture_audit.py                     ← SPR-195
 │
+├── maintenance/                             ← scripts mantenimiento recurrente productivo (D-A14: NO ad-hoc, ver §5.3)
+│   └── check_orphan_files.ps1               ← detecta archivos huérfanos no referenciados en TRUTH/SYSTEMS_INDEX
+│
 └── utils/                                   ← libs internas reusables
     ├── unreal_helpers.py
     └── json_helpers.py
@@ -407,10 +424,28 @@ scripts/
 ### 5.1 Reglas
 
 - **`build/`**: scripts numerados se ejecutan en orden por el orquestador. Nunca añadir un `02b_` o `03_5_` — re-numerar si hace falta.
-- **`tools/`**: ad-hoc, no se orquestan.
-- **`utils/`**: importables desde build y tools.
+- **`build/tests/`**: subdir pytest (golden contracts, ver §5.2). NO se orquesta dentro del pipeline `build/`; se ejecuta vía `pytest scripts/build/tests/` standalone o en CI.
+- **`tools/`**: ad-hoc, no se orquestan. Decisión D-A14: scripts one-shot o uso manual puntual.
+- **`maintenance/`**: scripts de mantenimiento recurrente **productivo** (NO ad-hoc — ver §5.3). Distinción canónica D-A14 frente a `tools/`.
+- **`utils/`**: importables desde build, tools y maintenance.
 - **Cada script Python tiene `if __name__ == "__main__":`** para ser ejecutable standalone Y desde UEFN.
 - **`init_unreal.py` (auto-load Python en UEFN)**: el plugin Python de Unreal Engine auto-carga `init_unreal.py` SOLO si está en `Content/Python/` ([dev.epicgames.com — Scripting the Unreal Editor using Python](https://dev.epicgames.com/documentation/en-us/unreal-engine/scripting-the-unreal-editor-using-python)). Mantenerlo en `scripts/` (decisión actual del proyecto, fuera de canon UE) requiere registro manual en `Project Settings → Plugins → Python → Startup Scripts` apuntando a `scripts/init_unreal.py`. Validar empíricamente que UEFN expone el Python Editor Script Plugin con el mismo workflow que UE estándar — si no, mover a `Content/Python/init_unreal.py` o aceptar que el script no corre al abrir el editor.
+
+### 5.2 Carpeta `scripts/build/tests/`
+
+- **Propósito**: golden contract tests pytest sobre los exporters de `build/` (validan que el output Verse generado coincide con un fixture esperado byte-a-byte modulo header). Promovido en SPR-009 F-C-3 (event bus exporter).
+- **Naming canónico**: `test_<snake>.py` (regex `^test_[a-z][a-z0-9_]*\.py$`) o `__init__.py`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case `*.json`).
+- **Validador (§8)**: ruta `scripts/build/tests/` se enruta a regla `scripts_build_tests`; `scripts/build/tests/fixtures/` se enruta a regla `data`. Archivos que matchean se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
+- **Archivos actuales**: `__init__.py`, `test_exporter_event_bus.py`, `fixtures/event_bus_expected_contract.json` (SPR-009 F-C-3).
+
+### 5.3 Carpeta `scripts/maintenance/`
+
+- **Propósito**: scripts de mantenimiento **recurrente productivo** del repositorio — distintos de `tools/` (ad-hoc, D-A14). Ejemplo paradigmático: detección de archivos huérfanos pre-SPR para evitar drift acumulado.
+- **Distinción D-A14 vs `tools/`**:
+  - `tools/`: one-shot o uso manual puntual (ej. `texture_audit.py`, `balance_curve_visualizer.py`, `new_map_scaffolder.py`).
+  - `maintenance/`: invocados en hooks pre-flight de cada SPR o en cron CI semanal/mensual (recurrente sistemático).
+- **Naming**: `<snake_case>.{py,ps1}`. PowerShell admitido para integración Windows-first del proyecto.
+- **Archivos actuales**: `check_orphan_files.ps1` (detecta archivos en disco no referenciados en TRUTH §3-§6 ni en SYSTEMS_INDEX.md).
 
 ---
 
@@ -436,6 +471,7 @@ docs/
 ├── API_REFERENCE_GENERATED.md
 ├── JSON_SCHEMAS.md
 ├── BALANCE_FORMULAS.md
+├── VERSE_SYNTAX_GUIDE.md                    ← lecciones empíricas sintaxis Verse (compilador UEFN)
 │
 ├── UI_UX_STYLE_GUIDE.md
 ├── TESTING_PROTOCOL.md
@@ -444,11 +480,14 @@ docs/
 │
 ├── CHANGELOG.md
 ├── DAILY_LOG.md                             ← plantilla canónica + instructivo del flujo (NO archivo vivo, ver §6.2)
-├── POSTMORTEMS_INDEX.md
+├── POSTMORTEMS_INDEX.md                     ← índice de postmortems (ver §6.3 + carpeta postmortems/)
 │
 ├── dailylog/                                ← un archivo por día (output de scripts/tools/close_sprint.py)
 │   ├── .gitkeep
 │   └── DL_YYYY-MM-DD_SPR-<tokens>_<autor>.md
+│
+├── postmortems/                             ← retrospectivas de incidentes (ver §6.3)
+│   └── PM-<id>.md                           ← naming PM-<ID>.md (regex en §1.1 fila Postmortems)
 │
 └── HOWTO_NEW_MAP.md                         ← SPR-203 (futuro)
 ```
@@ -469,6 +508,14 @@ docs/
 - **Histórico**: NO se mueve, NO se archiva. Cada día queda persistido como un archivo independiente en esta carpeta.
 - **`.gitkeep`** garantiza que la carpeta se trackee aunque esté vacía. El validador estructural (§8) ignora `.gitkeep` para `BAD_NAMING` y `UNDECLARED`.
 - **Excepción de naming pattern para validador**: archivos `DL_*.md` aquí cumplen su propia regla (regex de §1.1 fila *Daily logs*), NO la regla `docs` genérica (`SCREAMING_SNAKE.md`). El validador de §8 debe contemplarlo si se extiende a esta carpeta — hasta entonces, los daily logs caen en `UNDECLARED` y solo son warning. Bug conocido: SPR-001-FIX-2 (parser TRUTH) lo aborda.
+
+### 6.3 Carpeta `docs/postmortems/`
+
+- **Propósito**: retrospectivas de **incidentes** — bloqueos no triviales, recoveries de sesión perdida, regresiones inesperadas. Distintos de los daily logs (rutinarios, automáticos) y del `POSTMORTEMS_INDEX.md` (índice de entradas, vive en `docs/` raíz).
+- **Naming canónico**: `PM-<id>.md` — regex `^PM-[A-Za-z0-9_-]+\.md$`. `<id>` admite mayús/minús/dígitos/`-`/`_`. Ejemplos commiteados: `PM-SPR-009-blocked.md`, `PM-RECOVERY-2026-05-08.md`, `PM-SPR-211.md`.
+- **Generación**: humano. NO automatizado. Se redacta al cerrar el incidente y se referencia desde `POSTMORTEMS_INDEX.md` y desde el daily log de la fecha en que se cerró.
+- **Validador (§8)**: ruta `docs/postmortems/` se enruta a regla `docs_postmortems`; archivos que matchean el regex se consideran implícitamente declarados (no aparecen en `UNDECLARED`, no caen en `BAD_NAMING` por la regla `docs` genérica).
+- **Histórico**: NO se mueve, NO se archiva. Cada postmortem queda persistido como un archivo independiente en esta carpeta.
 
 ---
 

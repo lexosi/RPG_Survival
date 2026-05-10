@@ -33,21 +33,52 @@ TRUTH = ROOT / "docs" / "FOLDER_STRUCTURE_TRUTH.md"
 NAMING_RULES = {
     "data": re.compile(r"^[a-z][a-z0-9_]*\.json$"),
     "Verse": re.compile(r"^[A-Z][A-Za-z0-9]*\.verse$"),
-    "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusConstants\.verse$"),
+    # SPR-009-PRE-010: smoke tests Verse en Content/Verse/Tests/ con naming snake_case test_*.verse
+    "Verse_tests": re.compile(r"^test_[A-Za-z0-9_]+\.verse$"),
+    "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusDevice\.verse$"),
     "scripts_build": re.compile(r"^\d{2}_[a-z][a-z0-9_]*\.py$"),
+    # SPR-009-PRE-010: subdir scripts/build/tests/ con naming pytest (test_*.py + __init__.py)
+    "scripts_build_tests": re.compile(r"^test_[a-z][a-z0-9_]*\.py$|^__init__\.py$"),
     "docs": re.compile(r"^[A-Z][A-Z0-9_]*\.md$|^README\.md$"),
     # SPR-207-FIX-1: daily logs en docs/dailylog/ siguen su propia regla
     # (TRUTH §1.1 fila "Daily logs" + §6.2). DL_<fecha>_SPR-<tokens>_<autor>.md
     "docs_dailylog": re.compile(r"^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$"),
+    # SPR-009-PRE-010: postmortems en docs/postmortems/ siguen naming PM-<id>.md
+    # (TRUTH §1.1 fila "Postmortems" + §6.3). Formato commiteado, referenciado por POSTMORTEMS_INDEX.md.
+    "docs_postmortems": re.compile(r"^PM-[A-Za-z0-9_-]+\.md$"),
 }
+
+# SPR-009-PRE-010: ignore patterns para rglob — bytecode Python no source-controlled
+# (.gitignore L29-30 cubre __pycache__/ y *.pyc, pero rglob escanea filesystem).
+IGNORED_DIRS = {"__pycache__"}
+IGNORED_SUFFIXES = {".pyc"}
+
+
+def _is_ignored(p: Path) -> bool:
+    if p.suffix in IGNORED_SUFFIXES:
+        return True
+    return any(part in IGNORED_DIRS for part in p.parts)
 
 
 def docs_rule_for(rel_posix: str) -> str:
     """Selecciona regla aplicable a un archivo dentro de docs/.
-    docs/dailylog/* → regla DL. docs/* raíz → regla SCREAMING_SNAKE."""
+    docs/dailylog/* → regla DL. docs/postmortems/* → regla PM. docs/* raíz → regla SCREAMING_SNAKE."""
     if rel_posix.startswith("docs/dailylog/"):
         return "docs_dailylog"
+    if rel_posix.startswith("docs/postmortems/"):
+        return "docs_postmortems"
     return "docs"
+
+
+def scripts_build_rule_for(rel_posix: str) -> str:
+    """Selecciona regla aplicable a un archivo dentro de scripts/build/.
+    scripts/build/tests/fixtures/*.json → regla data. scripts/build/tests/*.py → tests.
+    scripts/build/*.py raíz → NN_*.py."""
+    if rel_posix.startswith("scripts/build/tests/fixtures/"):
+        return "data"
+    if rel_posix.startswith("scripts/build/tests/"):
+        return "scripts_build_tests"
+    return "scripts_build"
 
 def parse_truth_paths(md_text: str) -> set[str]:
     """Extrae paths de los bloques ``` SIN lenguaje de §3, §4, §5, §6.
@@ -127,6 +158,7 @@ def validate(strict: bool = False, allow_missing: bool = False) -> int:
         ("Content/Verse/Core", "Verse"),
         ("Content/Verse/Devices", "Verse"),
         ("Content/Verse/Generated", "Generated"),
+        ("Content/Verse/Tests", "Verse_tests"),
         ("scripts/build", "scripts_build"),
         ("docs", "docs"),
     ]:
@@ -137,9 +169,17 @@ def validate(strict: bool = False, allow_missing: bool = False) -> int:
             if p.is_file():
                 if p.name == '.gitkeep':
                     continue
+                if _is_ignored(p):
+                    continue
                 rel_posix = p.relative_to(ROOT).as_posix()
-                # SPR-207-FIX-1: en docs/, regla por path (raíz vs dailylog/)
-                key = docs_rule_for(rel_posix) if folder == "docs" else rule_key
+                # SPR-207-FIX-1: en docs/, regla por path (raíz vs dailylog/ vs postmortems/)
+                # SPR-009-PRE-010: en scripts/build/, regla por path (raíz vs tests/ vs tests/fixtures/)
+                if folder == "docs":
+                    key = docs_rule_for(rel_posix)
+                elif folder == "scripts/build":
+                    key = scripts_build_rule_for(rel_posix)
+                else:
+                    key = rule_key
                 if not NAMING_RULES[key].match(p.name):
                     bad_naming.append(rel_posix)
 
@@ -152,10 +192,27 @@ def validate(strict: bool = False, allow_missing: bool = False) -> int:
             if p.is_file():
                 if p.name == '.gitkeep':
                     continue
+                if _is_ignored(p):
+                    continue
                 rel = p.relative_to(ROOT).as_posix()
                 # SPR-207-FIX-1: docs/dailylog/DL_*.md están implícitamente declarados
                 # vía pattern (TRUTH §6.2 los trata como "contenedor de DL_*").
                 if rel.startswith("docs/dailylog/") and NAMING_RULES["docs_dailylog"].match(p.name):
+                    continue
+                # SPR-009-PRE-010: docs/postmortems/PM-*.md están implícitamente declarados
+                # vía pattern (TRUTH §6.3 los trata como "contenedor de PM-*").
+                if rel.startswith("docs/postmortems/") and NAMING_RULES["docs_postmortems"].match(p.name):
+                    continue
+                # SPR-009-PRE-010: scripts/build/tests/test_*.py + __init__.py + fixtures/*.json
+                # implícitamente declarados (TRUTH §5.2 los trata como "contenedor de tests pytest").
+                if rel.startswith("scripts/build/tests/"):
+                    if rel.startswith("scripts/build/tests/fixtures/") and NAMING_RULES["data"].match(p.name):
+                        continue
+                    if NAMING_RULES["scripts_build_tests"].match(p.name):
+                        continue
+                # SPR-009-PRE-010: Content/Verse/Tests/test_*.verse implícitamente declarados
+                # (TRUTH §4.2 los trata como "contenedor de smoke tests Verse").
+                if rel.startswith("Content/Verse/Tests/") and re.match(r"^test_[A-Za-z0-9_]+\.verse$", p.name):
                     continue
                 if rel not in declared:
                     undeclared.append(rel)
