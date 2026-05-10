@@ -345,26 +345,88 @@ BigNumber := struct:
 
 ### 3.7 AdminCommands.verse
 
-> **Arquitectura (C1)**: singleton top-level. Acceso por `using { /<ProjectName>/Core/AdminCommands }`.
+> **Arquitectura (D-A13 vigente, B1.1-fix SPR-010)**: identificación de admin via uno o varios `player_reference_device` configurados en editor UEFN. NO existe device dedicado a auth/admin en la API Fortnite vigente — `player_reference_device` es el único mecanismo posible. Fuente empírica: build `++Fortnite+Release-40.30-CL-53276632` (`Fortnite.digest.verse` línea 2300+, cache UEFN local) cross-validado con foro Epic Nov 2024.
 >
-> **Identificación de admin (Auditoría retrospectiva — Bloque 1)**: la API Verse pública de `player` no expone método estable que devuelva un identificador serializable (`GetID()`/`GetName()`/`GetAccountID()` no existen en la doc oficial; `IsActive[]` es el método público confirmado para validación de scope). Fuente: [dev.epicgames.com — player class](https://dev.epicgames.com/documentation/en-us/fortnite/verse-api/versedotorg/simulation/player) + feature request abierta [forums — Get player name in Verse](https://forums.unrealengine.com/t/feature-request-get-player-name-in-verse/1378109). Identificación se hace por uno o varios `player_reference_device` configurados en editor UEFN. El módulo `AdminCommands` recibe el array de refs vía función `Init` (la sostiene `Devices/AdminPanel.verse` con `@editable AdminRefs:[]player_reference_device = array{}`) y comprueba `Ref.IsRegistered[Agent]` en runtime. Detalle en `CONCEPT.md` SPR-010 + `GLOSSARY.md` "Admin (player ID)" + `JSON_SCHEMAS.md` §37.
+> **Patrón canónico**: `Core/AdminCommands.verse` = namespace puro stateless (`module:`). State (array de refs) NO vive top-level — falla por lección 5 (`var` top-level SOLO `weak_map`). State vive en `Devices/AdminPanel.verse` (`@editable AdminRefs:[]player_reference_device = array{}`) y se pasa como param a las funciones de `AdminCommands`. Detalle en `VERSE_SYNTAX_GUIDE.md` §1 lección 17 + §2.4-bis, `CONCEPT.md` §13.3 SPR-010, `GLOSSARY.md` "Admin (player ID)", `JSON_SCHEMAS.md` §37.
 
-#### Init(Refs:[]player_reference_device):void
+#### API real `player_reference_device` (referenced device, build 40.30)
+
+| Miembro | Firma | Notas |
+|---|---|---|
+| `ActivatedEvent` | `:listenable(agent) = external {}` | Subscribable. Signaled cuando device activado. Sends agent referenced. |
+| `TrackedStatChangedEvent` | `:listenable(agent)` | Stat tracked actualizado. |
+| `AgentUpdatedEvent` | `:listenable(agent)` | Equivalente conceptual a "OnRegistered". Sends nuevo agent stored. |
+| `AgentUpdateFailsEvent` | `:listenable(agent)` | Update falló. Sends agent que intentó storage. |
+| `AgentReplacedEvent` | `:listenable(agent)` | Equivalente "OnUnregistered" via overwrite. Sends nuevo agent. |
+| `Enable():void` | regular | Activa device. |
+| `Disable():void` | regular | Desactiva device. |
+| `Activate():void` | ⚠️ regular | **TRAMPA**: ends round/game, NO activate-reference. |
+| `Register(Agent:agent):void` | regular | Registra Agent como referenced. |
+| `Clear():void` | regular | **NO unregister selectivo** — limpia state device entero. |
+| `IsReferenced(Agent:agent)<transacts><decides>:void` | failable | Llamar con `[]`. Propaga ambos specifiers al caller. |
+| `GetAgent():?agent` | regular | Retorna option agent currently referenced. |
+| `GetStatValue():int` | regular | Stat value tracked actualmente. |
+
+> **Para auth multi-admin** → array de devices (1 por admin permanente), iterar con `IsReferenced[Agent]` failable. `Clear()` no sirve para unregister individual (limpia el device entero).
+
+#### IsAdmin(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void
+
+**Ubicación**: `Content/Verse/Core/AdminCommands.verse`
+**Estado**: 🚧 Pendiente SPR-010 (post-refactor B1.1-fix)
+**Descripción**: failable predicate. **Succeeds** si alguno de los `player_reference_device` recibidos tiene `Ref.IsReferenced[Agent]`. **Fail** (no admin) si ninguno reference Agent. Toma `agent` (no `player`) porque eventos de devices Fortnite emiten `agent`.
+
+**Patrón canónico interno**:
+
+```verse
+IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+    for (Ref:Refs):
+        if (Ref.IsReferenced[Agent]):
+            return
+    fail
+```
+
+**Sintaxis caller**:
+
+```verse
+if (AdminCommands.IsAdmin[AdminRefs, Agent]):
+    # admin actions
+```
+
+**Por qué `Refs` como param y NO state interno**:
+- Lección 5 VERSE_SYNTAX_GUIDE: `var` top-level SOLO `weak_map`. `var Refs:[]player_reference_device` falla con err 3502 (`Module-scoped var must have weak_map type`).
+- Patrón vigente: state vive en `AdminPanel` device (`@editable`). `AdminCommands` stateless namespace puro.
+- Validado empíricamente SPR-010 Step 0 throwaway build FAIL → Step 0.5 investigación API.
+
+#### IsAdminLogic(Refs:[]player_reference_device, Agent:agent):logic
+
+**Ubicación**: `Content/Verse/Core/AdminCommands.verse`
+**Estado**: 🚧 Pendiente SPR-010 (wrapper opcional)
+**Descripción**: wrapper non-failable. Útil si caller necesita `logic` en lugar de consumir `<decides>` con `if`.
+
+```verse
+IsAdminLogic<public>(Refs:[]player_reference_device, Agent:agent):logic=
+    if (IsAdmin[Refs, Agent]) { true } else { false }
+```
+
+#### ExecuteCommand(Refs:[]player_reference_device, Agent:agent, Command:string, Args:[]string):void
+
 **Ubicación**: `Content/Verse/Core/AdminCommands.verse`
 **Estado**: 🚧 Pendiente SPR-010
-**Descripción**: inyecta el array de `player_reference_device` que `AdminPanel` mantiene como `@editable`. Llamado una vez desde `AdminPanel.OnBegin` antes de habilitar la UI.
+**Descripción**: ejecuta comando admin si `IsAdmin[Refs, Agent]` succeeds. Si fail, loguea intento + ignora silenciosamente (no panic).
 
-#### IsAdmin(Agent:agent):logic
-**Ubicación**: `Content/Verse/Core/AdminCommands.verse`
-**Estado**: 🚧 Pendiente SPR-010
-**Descripción**: true si **alguno** de los `player_reference_device` registrados vía `Init` tiene `IsRegistered[Agent]`. Toma `agent` (no `player`) porque los eventos de devices Fortnite emiten `agent` y el caller no necesita castearlo a `player`. Implementación interna usa `for (Ref:Refs) { if (Ref.IsRegistered[Agent]) { return true } }; return false`.
+#### ❌ Funciones que NO existen (no implementar) — corrección B1.1-fix
 
-#### ExecuteCommand(Agent:agent, Command:string, Args:[]string):void
-**Estado**: 🚧 Pendiente SPR-010
-**Descripción**: ejecuta comando admin si `IsAdmin(Agent)` es true. Si no, loggea intento + ignora.
+API real `player_reference_device` (build 40.30) NO incluye:
 
-#### ❌ Funciones que NO existen (no implementar)
-- ~~`IsAdmin(InPlayer:player):logic` con check tipo `InPlayer.GetID() == ADMIN_ID_HARDCODED`~~ — la API Verse pública de `player` no expone `GetID()` ni getter de identidad estable serializable (ver cabecera §3.7). Workaround canónico = `player_reference_device.IsRegistered[Agent]`.
+- ~~`IsRegistered(Agent:agent)`~~ — usar `IsReferenced(Agent:agent)<transacts><decides>:void`. Confusión venía de `player_checkpoint_device` que SÍ tiene `IsRegistered` (semántica respawn, NO admin).
+- ~~`IsAssignedTo(Agent:agent)`~~ — no existe.
+- ~~`Unregister(Agent:agent)`~~ — solo existe `Clear():void` (no selectivo).
+- ~~`GetRegisteredPlayer():player`~~ — usar `GetAgent():?agent` (option, agent no player).
+- ~~`OnRegistered:event(agent)`~~ — usar `AgentUpdatedEvent:listenable(agent)`. Diferencia clave: `listenable(t)` SÍ es subscribable (`.Subscribe(handler)`), distinto de `event(t)` custom (lección 16).
+- ~~`IsValidPlayer():logic`~~ — pattern equivalente: `if (Agent := Device.GetAgent[]):`.
+- ~~`IsActive():logic`~~ — no expone enable/disable como query.
+- ~~`IsAdmin(InPlayer:player):logic` con `InPlayer.GetID() == ADMIN_ID_HARDCODED`~~ — API Verse `player` no expone `GetID()` ni getter identidad estable serializable. Workaround canónico = `player_reference_device.IsReferenced[Agent]` (B1.1 SPR-010).
+- ~~`AdminCommands.Init(Refs:[]player_reference_device):void` con state interno top-level~~ — falla por lección 5 (var top-level SOLO weak_map). Patrón vigente: Refs como param, state en Device.
 
 ---
 

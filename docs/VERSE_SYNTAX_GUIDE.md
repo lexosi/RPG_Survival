@@ -2,11 +2,11 @@
 
 > **Fuente única de verdad** para sintaxis Verse moderna en este proyecto.
 > Cualquier doc autoritativo que contradiga este documento está OBSOLETO.
-> Última actualización: 2026-05-09 (SPR-009 F-C-4-L1b — lección 16 + sub-corolarios A-D, post-H4).
+> Última actualización: 2026-05-10 (SPR-010 L1 B1.1-fix — lección 17 API real `player_reference_device` + corolario `listenable(t)` subscribable + §2.4-bis Core stateless + Device state-bearing).
 
 ---
 
-## §1 Reglas inquebrantables (las 16 lecciones)
+## §1 Reglas inquebrantables (las 17 lecciones)
 
 ### Lección 1 — `<ProjectName>` placeholder LITERAL
 
@@ -208,6 +208,48 @@ El task lanzado con `spawn{}` no entra en `Await()` instantáneamente — necesi
 
 `Bus.<Evento>.Signal(payload)` resume **dentro** de la llamada a Signal todos los `Await` suspendidos pendientes, **antes** de que Signal retorne. NO es fire-and-forget asíncrono. Implicación: el orden de logs "Handler invoked" → "Step N — Signal emitted" demuestra ejecución sincrónica del handler. Validado SPR-009 F-C-3a.
 
+### Lección 17 — `player_reference_device` API real (build 40.30) + corolario `listenable(t)` subscribable
+
+Validado empíricamente SPR-010 Step 0.5 (`Verse.digest` 40.30-CL-53276632 cross-validated foro Epic Nov 2024). 5 docs autoritativos del proyecto (B1.1) canonizaron API ficticia que NO existe en el digest real.
+
+**API real**:
+
+| Miembro | Firma | Notas |
+|---|---|---|
+| `IsReferenced(Agent:agent)<transacts><decides>:void` | failable, `[]` | El método de identificación. NO `IsRegistered`. |
+| `Register(Agent:agent):void` | regular | Asigna agent al device. |
+| `Clear():void` | regular | ⚠️ Limpia state ENTERO, NO unregister selectivo. |
+| `Activate():void` | regular | ⚠️ TRAMPA: ends round/game, NO activate-reference. |
+| `GetAgent():?agent` | regular | Option agent referenced. |
+| `AgentUpdatedEvent:listenable(agent)` | event subscribable | Sends agent en register/replace. |
+
+**Corolario lección 16** (refinamiento): la prohibición de `.Subscribe(handler)` aplica a **`event(t)` custom** (EventBus). **`listenable(t)` de devices nativos SÍ es subscribable**:
+
+```verse
+# ✅ Funciona — listenable(agent) de device nativo
+PlayerRefDevice.AgentUpdatedEvent.Subscribe(OnAgentChanged)
+
+# ❌ Falla err 3506 — event(t) custom no implementa subscribable (lección 16)
+EventBus.PlayerJoined.Subscribe(handler)  # PlayerJoined es event(payload_t)
+```
+
+Implicación: dos tipos distintos a nivel de tipos Verse. `listenable(t)` = `class(subscribable(t), ...)`. `event(t)` builtin = `class(signalable(t), awaitable(t))`. NO mismo tipo.
+
+**Auth multi-admin pattern**: array de `player_reference_device` (1 por admin), iterar `IsReferenced[Agent]` failable:
+
+```verse
+# ✅ Patrón canónico SPR-010
+IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+    for (Ref:Refs):
+        if (Ref.IsReferenced[Agent]):
+            return
+    fail
+```
+
+`Clear()` NO sirve para remove individual: limpia el device entero. Solución = 1 device por admin permanente.
+
+**Lección de proceso P5 (canonizar en CHANGELOG L3)**: auditorías retroactivas sobre API DEBEN validar contra `Verse.digest` + build real. B1.1 SPR-010 falló porque "API_REFERENCE.md decía X" se asumió correcto sin verificar empíricamente.
+
 ---
 
 ## §2 Patrones canónicos verificados
@@ -370,6 +412,58 @@ OnPlayerSpawn(P:player):void=
 - Daily log: `docs/dailylog/DL_2026-05-08_SPR-008_lexosi.md`.
 - Postmortem (si aplica): no requerido — SPR cerró sin incidentes graves.
 - Test validation: `Content/Verse/Tests/test_persistence_SPR008.verse` con HUD PASS.
+
+#### §2.4-bis Caso "Core stateless + Device state-bearing" (SPR-010 AdminCommands)
+
+> Validado SPR-010 post-Step 0.5 investigación API. Segundo precedente para "Core con state mutable" tras PersistenceLayer SPR-008.
+
+**Cuándo aplicar**: Core necesita state mutable que NO encaja en `weak_map` (ej. array de device refs configurados en editor, lista de flags admin runtime, etc.).
+
+**Patrón**: Core stateless namespace puro. State vive en un `creative_device` (típicamente `Devices/<Sistema>Panel.verse`). Device pasa state como param a las funciones del Core.
+
+```verse
+# Core/AdminCommands.verse — namespace puro stateless
+AdminCommands<public> := module:
+
+    IsAdmin<public>(Refs:[]player_reference_device, Agent:agent)<transacts><decides>:void=
+        for (Ref:Refs):
+            if (Ref.IsReferenced[Agent]):
+                return
+        fail
+```
+
+```verse
+# Devices/AdminPanel.verse — state via @editable, scope = device instance
+admin_panel_device := class<concrete>(creative_device):
+
+    @editable AdminRefs:[]player_reference_device = array{}
+
+    OnBegin<override>()<suspends>:void=
+        # state Refs vive aquí, NO top-level
+        # AdminCommands recibe Refs como param
+        if (Players := Self.GetPlayspace().GetPlayers(); FirstP := Players[0]):
+            if (AdminCommands.IsAdmin[AdminRefs, FirstP]):
+                # admin UI
+```
+
+**Por qué NO top-level scope**:
+- Lección 5: `var` top-level SOLO `weak_map`. Falla con err 3502 para tipos no-weak_map.
+- Validado SPR-010 Step 0 throwaway build FAIL: `var ThrowawayRefs:[]player_reference_device` → err 3502 (`Module-scoped var must have weak_map type`).
+
+**Por qué NO `module:` con funciones que mutan state externo**:
+- Module namespace es stateless por definición. State debe inyectarse como param o vivir en device instance.
+
+**Comparación con caso PersistenceLayer (§2.4)**:
+
+| Dimensión | PersistenceLayer (§2.4) | AdminCommands (§2.4-bis) |
+|---|---|---|
+| State type | `weak_map` (única excepción permitida top-level) | `[]device_t` (array de device refs) |
+| Scope state | top-level archivo (sin `module:` wrapper, scope = carpeta) | Device instance (`@editable`) |
+| Core wrapper | declaraciones top-level + funciones `<public>` top-level | `module:` namespace puro stateless |
+| Caller import | `using { /<root>/Verse/Core }` (carpeta) | `using { Verse.Core.AdminCommands }` (dotted) |
+| Trade-off | Necesario para `weak_map` persistence | Más limpio: stateless Core + state owner explícito (Device) |
+
+**Cuándo elegir cada uno**: `weak_map` requiere precedente PersistenceLayer (lección 14 — namespace = carpeta). Otros tipos de state mutable → patrón §2.4-bis (Device-bearing).
 
 ---
 
