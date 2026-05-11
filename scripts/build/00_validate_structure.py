@@ -114,7 +114,7 @@ def verse_tests_rule_for(rel_posix: str) -> str:
     return "Verse_tests"
 
 
-def parse_truth_paths(md_text: str) -> set[str]:
+def parse_truth_paths(md_text: str) -> list[str]:
     """Extrae paths de los bloques ``` SIN lenguaje de §3, §4, §5, §6.
 
     Estado del parser (SPR-001-FIX-2):
@@ -168,7 +168,9 @@ def parse_truth_paths(md_text: str) -> set[str]:
         current_indent.append((indent, name))
         if "." in name:
             paths.add(full)
-    return paths
+    # SPR-F-CLEAN-P2b-fix: orden determinista (drift #11 §2.4) — set() iteration
+    # no-determinista entre runs causa output validador inestable.
+    return sorted(paths)
 
 def validate(strict: bool = False, allow_missing: bool = False, phase: str | None = None, no_truncate: bool = False) -> int:
     if not TRUTH.exists():
