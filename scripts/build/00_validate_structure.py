@@ -170,7 +170,7 @@ def parse_truth_paths(md_text: str) -> set[str]:
             paths.add(full)
     return paths
 
-def validate(strict: bool = False, allow_missing: bool = False, phase: str | None = None) -> int:
+def validate(strict: bool = False, allow_missing: bool = False, phase: str | None = None, no_truncate: bool = False) -> int:
     if not TRUTH.exists():
         print(f"[FAIL] No existe {TRUTH}", file=sys.stderr)
         return 1
@@ -289,35 +289,33 @@ def validate(strict: bool = False, allow_missing: bool = False, phase: str | Non
                     undeclared.append(rel)
 
     # Reporte
+    # SPR-F-CLEAN-P2a-fix: helper para truncado condicional (drift #10 §2.4).
+    # Sin --no-truncate, comportamiento idéntico al previo (20/10 entries).
+    def _print_list(items: list[str], default_limit: int) -> None:
+        limit = None if no_truncate else default_limit
+        shown = items if limit is None else items[:limit]
+        for item in shown:
+            print(f"   {item}")
+        if limit is not None and len(items) > limit:
+            print(f"   ... y {len(items) - limit} mas")
+
     if missing:
         label = "[WARN] MISSING (ignorado por --allow-missing)" if allow_missing else "[FAIL] MISSING"
         print(f"\n{label} ({len(missing)}):")
-        for m in missing[:20]:
-            print(f"   {m}")
-        if len(missing) > 20:
-            print(f"   ... y {len(missing) - 20} mas")
+        _print_list(missing, 20)
     if bad_naming:
         print(f"\n[FAIL] BAD_NAMING ({len(bad_naming)}):")
         for b in bad_naming:
             print(f"   {b}")
     if undeclared:
         print(f"\n[WARN] UNDECLARED ({len(undeclared)}):")
-        for u in undeclared[:20]:
-            print(f"   {u}")
-        if len(undeclared) > 20:
-            print(f"   ... y {len(undeclared) - 20} mas")
+        _print_list(undeclared, 20)
     if missing_future_phase:
         print(f"\n[INFO] MISSING en fases futuras (ignorado por --phase={phase}) ({len(missing_future_phase)}):")
-        for m in missing_future_phase[:10]:
-            print(f"   {m}")
-        if len(missing_future_phase) > 10:
-            print(f"   ... y {len(missing_future_phase) - 10} mas")
+        _print_list(missing_future_phase, 10)
     if missing_unmapped:
         print(f"\n[WARN] MISSING UNMAPPED (sin fase asignada, P2b pendiente) ({len(missing_unmapped)}):")
-        for m in missing_unmapped[:20]:
-            print(f"   {m}")
-        if len(missing_unmapped) > 20:
-            print(f"   ... y {len(missing_unmapped) - 20} mas")
+        _print_list(missing_unmapped, 20)
 
     if missing and not allow_missing:
         return 1
@@ -343,4 +341,5 @@ if __name__ == "__main__":
         strict="--strict" in sys.argv,
         allow_missing="--allow-missing" in sys.argv,
         phase=phase_arg,
+        no_truncate="--no-truncate" in sys.argv,
     ))
