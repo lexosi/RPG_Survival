@@ -46,3 +46,11 @@ scripts/tools/_throwaway/*
 
 # Claude Code local config (no commitear)
 .claude/
+
+# UEFN auto-generated external actors/objects (un actor = un archivo)
+# Cambian constantemente, conflictos imposibles si se commitean
+Content/__ExternalActors__/
+Content/__ExternalObjects__/
+
+# MCP config — paths locales por máquina, usa .mcp.json.template como guía
+.mcp.json

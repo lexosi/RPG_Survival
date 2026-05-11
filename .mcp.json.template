@@ -1,0 +1,14 @@
+﻿{
+  "_comment": "TEMPLATE — copiar a .mcp.json y ajustar paths a tu sistema",
+  "_setup": "Ver docs/MCP_SETUP.md para instrucciones de instalación",
+  "mcpServers": {
+    "uefn": {
+      "command": "python",
+      "args": ["<PATH_TO>/uefn-mcp-server/mcp_server.py"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "<PATH_TO>/RPG_Survival"]
+    }
+  }
+}
