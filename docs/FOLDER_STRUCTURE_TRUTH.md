@@ -426,7 +426,7 @@ scripts/
 │
 ├── tools/                                   ← scripts ad-hoc, sin orden
 │   ├── balance_curve_visualizer.py          ← from BALANCE_FORMULAS.md
-│   ├── close_sprint.py                      ← SPR-207 (genera/actualiza daily log al cerrar SPR; uso manual, ver WORKFLOW §3 Fase 4)
+│   ├── close_sprint.py                      ← SPR-207 + F-CLEAN-P3 (genera daily log + enforcement 3 checks anti-drift, ver §5.5)
 │   ├── dependency_cycle_check.py            ← SPR-205 (validador de ciclos en deps Verse, spec en MODULES §10.3)
 │   ├── new_map_scaffolder.py                ← SPR-199
 │   ├── localization_exporter.py             ← (TBD)
@@ -484,6 +484,42 @@ scripts/
   | Ejemplo | `_systems_index_parser.py` (parser markdown específico SYSTEMS_INDEX) | `json_helpers.py`, `unreal_helpers.py` |
 
 - **Archivos actuales**: `_systems_index_parser.py` (F-CLEAN-P2a 2026-05-11) — parsea `docs/SYSTEMS_INDEX.md` y expone mapa `Path → Fase` para filtros `--phase` del validador estructural.
+
+### 5.5 `scripts/tools/close_sprint.py` — enforcement post-cierre (F-CLEAN-P3)
+
+- **Propósito original (SPR-207)**: genera/actualiza Daily Log (`docs/dailylog/DL_*.md`, idempotente con bloques `AUTO`+`MANUAL` preservados).
+- **Responsabilidad añadida (F-CLEAN-P3 2026-05-11)**: ejecuta 3 checks enforcement post-DL gen, pre-exit. Bloquea cierre si drift detectado entre código y docs autoritativos.
+
+**Checks**:
+
+| # | Función | Falla si | Severidad |
+|---|---|---|---|
+| 1 | `check_changelog_done` | SPR no marcado `[x]` en `docs/CHANGELOG.md` (regex `^- \[x\] SPR-XXX —`) | FAIL |
+| 2 | `check_backlog_status` | SPR en `docs/SPRINTS_BACKLOG.md` sin emoji 🟢 en ninguna celda de la fila | FAIL si encontrado sin 🟢, WARN si no encontrado |
+| 3 | `check_systems_index_paths` | Archivos `.verse` tocados en `Core/`, `Systems/`, `Devices/` no declarados en `docs/SYSTEMS_INDEX.md` | WARN |
+
+**Filtro prefix Check 3**:
+- **Incluye**: `Content/Verse/Core/`, `Content/Verse/Systems/`, `Content/Verse/Devices/`
+- **Excluye**: `Content/Verse/Tests/` (smoke tests), `Content/Verse/Generated/` (exporter output), `Content/Verse/Tests/canary/` (audit trail)
+
+**Lookup SPR FIX-N**: busca primero `SPR-NNN-FIX-N`, fallback `SPR-NNN` base. Aplica a Check 1 (CHANGELOG).
+
+**Flag `--strict`**: eleva todos los WARN a FAIL. Útil en pre-commit hook o CI estricto.
+
+**Exit codes**:
+- `0` OK (todos PASS, o WARN sin `--strict`)
+- `4` FAIL enforcement (cualquier check FAIL, o WARN con `--strict`)
+- (`1`/`2`/`3` reservados a errores pre-existentes: SPR no encontrado, args inválidos, autor inválido)
+
+**Encoding**: `sys.stdout.reconfigure(encoding="utf-8")` defensivo al inicio (Windows console cp1252 default rompe emojis 🟢/⚠️/✅). Cierra drift #14 §2.4.
+
+**Detección archivos tocados (Check 3)**: primero `files_today()` (commits desde medianoche). Fallback si vacío y tag SPR existe: `git diff --name-only <prev_tag>..<spr_tag>`. Si ambos fallan, check 3 retorna `skip` silenciosamente.
+
+**Tests**: `scripts/build/tests/test_close_sprint.py` (F-CLEAN-P3 2026-05-11). 11 tests pytest con fixtures inline `tmp_path` cubren happy path + drift CHANGELOG + drift BACKLOG (pass/fail/warn) + skip/pass/warn Check 3 + filtro prefix Tests/Generated. Total suite 27/27 PASS post-P3.
+
+**Bucket**: 1 (transferible al handbook futuro — enforcement aplicable a cualquier proyecto con CHANGELOG + BACKLOG + índice de sistemas).
+
+**Refs**: F-CLEAN-P3 commit `ccbad64` (logic) + `049d76f` (DL housekeeping).
 
 ---
 
