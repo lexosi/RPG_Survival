@@ -1066,7 +1066,7 @@ Próximo: Auditoría 2 (lógica de integración), Auditoría 3 (rendimiento + ec
 - [ ] SPR-007 — Verse: Time Sync (UTC)
 - [ ] SPR-008 — Verse: Persistence Layer
 - [ ] SPR-009 — Verse: Event Bus interno
-- [ ] SPR-010 — Verse: Admin Commands
+- [x] SPR-010 — Verse: Admin Commands (done 2026-05-11, commit `f65c97d`, tag `SPR-010`)
 
 ### Sprints de test asociados (TESTING_PROTOCOL 4.3)
 - [ ] SPR-005-T — Test Module Registry
@@ -1074,7 +1074,7 @@ Próximo: Auditoría 2 (lógica de integración), Auditoría 3 (rendimiento + ec
 - [ ] SPR-007-T — Test TimeSync
 - [ ] SPR-008-T — Test PersistenceLayer (incluye persistence test logout/login)
 - [ ] SPR-009-T — Test EventBus
-- [ ] SPR-010-T — Test AdminCommands
+- [x] SPR-010-T — Test AdminCommands (`Tests/test_admin_smoke.verse`, integrado en commit `f65c97d`)
 
 ### Persistence (al completar SPR-008)
 - [ ] Schema Version inicial: 1
