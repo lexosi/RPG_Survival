@@ -35,6 +35,9 @@ NAMING_RULES = {
     "Verse": re.compile(r"^[A-Z][A-Za-z0-9]*\.verse$"),
     # SPR-009-PRE-010: smoke tests Verse en Content/Verse/Tests/ con naming snake_case test_*.verse
     "Verse_tests": re.compile(r"^test_[A-Za-z0-9_]+\.verse$"),
+    # SPR-010-TRUTH-FIX: throwaways canary en Content/Verse/Tests/canary/ con naming throwaway_*.verse
+    # (TRUTH §1.1 fila "Throwaways canary" + §4.2.1). Audit trail empírico P5 (CHANGELOG B1.1-fix L4).
+    "Verse_canary": re.compile(r"^throwaway_[A-Za-z0-9_]+\.verse$"),
     "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusDevice\.verse$"),
     "scripts_build": re.compile(r"^\d{2}_[a-z][a-z0-9_]*\.py$"),
     # SPR-009-PRE-010: subdir scripts/build/tests/ con naming pytest (test_*.py + __init__.py)
@@ -79,6 +82,15 @@ def scripts_build_rule_for(rel_posix: str) -> str:
     if rel_posix.startswith("scripts/build/tests/"):
         return "scripts_build_tests"
     return "scripts_build"
+
+
+def verse_tests_rule_for(rel_posix: str) -> str:
+    """Selecciona regla aplicable a un archivo dentro de Content/Verse/Tests/.
+    Tests/canary/throwaway_*.verse → regla Verse_canary. Tests/test_*.verse → Verse_tests."""
+    if rel_posix.startswith("Content/Verse/Tests/canary/"):
+        return "Verse_canary"
+    return "Verse_tests"
+
 
 def parse_truth_paths(md_text: str) -> set[str]:
     """Extrae paths de los bloques ``` SIN lenguaje de §3, §4, §5, §6.
@@ -178,6 +190,8 @@ def validate(strict: bool = False, allow_missing: bool = False) -> int:
                     key = docs_rule_for(rel_posix)
                 elif folder == "scripts/build":
                     key = scripts_build_rule_for(rel_posix)
+                elif folder == "Content/Verse/Tests":
+                    key = verse_tests_rule_for(rel_posix)
                 else:
                     key = rule_key
                 if not NAMING_RULES[key].match(p.name):
@@ -212,8 +226,13 @@ def validate(strict: bool = False, allow_missing: bool = False) -> int:
                         continue
                 # SPR-009-PRE-010: Content/Verse/Tests/test_*.verse implícitamente declarados
                 # (TRUTH §4.2 los trata como "contenedor de smoke tests Verse").
-                if rel.startswith("Content/Verse/Tests/") and re.match(r"^test_[A-Za-z0-9_]+\.verse$", p.name):
-                    continue
+                # SPR-010-TRUTH-FIX: Content/Verse/Tests/canary/throwaway_*.verse también
+                # implícitamente declarados (TRUTH §4.2.1 audit trail P5).
+                if rel.startswith("Content/Verse/Tests/"):
+                    if rel.startswith("Content/Verse/Tests/canary/") and NAMING_RULES["Verse_canary"].match(p.name):
+                        continue
+                    if NAMING_RULES["Verse_tests"].match(p.name):
+                        continue
                 if rel not in declared:
                     undeclared.append(rel)
 

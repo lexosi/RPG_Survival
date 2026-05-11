@@ -37,6 +37,7 @@
 | Daily logs | `DL_YYYY-MM-DD_SPR-<tokens>_<autor>.md` (regex `^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$`) | `DL_2026-05-06_SPR-001+FIX1_lexosi.md`, `DL_2026-05-06_SPR-001+FIX1+002_lexosi.md` |
 | Postmortems | `PM-<id>.md` (regex `^PM-[A-Za-z0-9_-]+\.md$`) — solo en `docs/postmortems/`. Permite mayús/minús/dígitos/`-`/`_`. Ver §6.3 | `PM-SPR-009-blocked.md`, `PM-RECOVERY-2026-05-08.md`, `PM-SPR-211.md` |
 | Tests Verse | `test_<snake>.verse` (regex `^test_[A-Za-z0-9_]+\.verse$`) — solo en `Content/Verse/Tests/`. Permite mayús en sufijos tipo `_SPR008`. Ver §4.2 | `test_event_bus_smoke.verse`, `test_persistence_SPR008.verse` |
+| Throwaways canary | `throwaway_<snake>.verse` (regex `^throwaway_[A-Za-z0-9_]+\.verse$`) — solo en `Content/Verse/Tests/canary/`. Audit trail empírico P5 (validación primitiva Verse). Ver §4.2.1 | `throwaway_admin_state.verse` |
 | Tests pytest | `test_<snake>.py` o `__init__.py` (regex `^test_[a-z][a-z0-9_]*\.py$\|^__init__\.py$`) — solo en `scripts/build/tests/`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case JSON). Ver §5.2 | `test_exporter_event_bus.py`, `__init__.py`, `fixtures/event_bus_expected_contract.json` |
 
 > **Nota sobre excepciones de Verse generado (Auditoría 3 — H3.6 + Auditoría regresión bloque 5 — H4 SPR-009)**: la lista de excepciones canónicas son ÚNICAMENTE `ModuleRegistryConstants.verse` y `EventBusDevice.verse` (decisiones D-A10 + D-A11, Auditoría 2 — C1+C3 + Auditoría regresión bloque 5 — H4). El nombre anterior `EventBusConstants.verse` queda obsoleto post-F-C-2 SPR-009 — el archivo se renombró a `EventBusDevice.verse` reflejando que el patrón vigente es `event_bus_device := class<concrete>(creative_device)` (no singleton top-level con `event_bus_module`). Verdad operativa en la regex de §8.2 línea 522. Coherente con `BOOTSTRAP_PIPELINE.md` §4.4 + `VERSE_SYNTAX_GUIDE.md` §1 lección 16. Cualquier otro archivo en `Generated/` DEBE llevar sufijo `_Generated`.
@@ -382,9 +383,18 @@ Content/Verse/
 ### 4.2 Carpeta `Content/Verse/Tests/`
 
 - **Propósito**: smoke tests Verse en runtime UEFN (no son tests unitarios — UEFN no expone framework). Verifican wiring crítico: bus de eventos vivo, persistencia idempotente, etc.
-- **Naming canónico**: `test_<snake>.verse` — regex `^test_[A-Za-z0-9_]+\.verse$` (mayús permitidas en sufijos tipo `_SPR008` para trazabilidad cross-sprint).
-- **Validador (§8)**: trata `Content/Verse/Tests/` como zona regulada con regla `Verse_tests` propia. Archivos que matchean el regex se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
-- **Archivos actuales**: `test_event_bus_smoke.verse` (SPR-009 F-C smoke EventBus), `test_persistence_SPR008.verse` (SPR-008 persistencia idempotente).
+- **Naming canónico** (raíz `Tests/`): `test_<snake>.verse` — regex `^test_[A-Za-z0-9_]+\.verse$` (mayús permitidas en sufijos tipo `_SPR008` para trazabilidad cross-sprint).
+- **Validador (§8)**: trata `Content/Verse/Tests/` como zona regulada. La raíz usa regla `Verse_tests`; la subcarpeta `canary/` usa regla `Verse_canary` (§4.2.1). Archivos que matchean el regex correspondiente se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
+- **Archivos actuales en raíz**: `test_event_bus_smoke.verse` (SPR-009 F-C smoke EventBus), `test_persistence_SPR008.verse` (SPR-008 persistencia idempotente).
+
+### 4.2.1 Subcarpeta `Content/Verse/Tests/canary/`
+
+- **Propósito**: throwaways de validación empírica de primitivas Verse (API real, sintaxis bordes, comportamiento failure contexts). Audit trail vivo de la lección de proceso **P5** (CHANGELOG B1.1-fix L4). NO son scratch — son evidencia commiteada de qué falló y qué pasó al canonizar cada lección.
+- **Naming canónico**: `throwaway_<snake>.verse` — regex `^throwaway_[A-Za-z0-9_]+\.verse$`. Topic en snake_case identifica la primitiva validada.
+- **Diferencia con `Tests/` raíz**: smoke tests (`test_*.verse`) verifican wiring runtime persistente. Canary throwaways (`throwaway_*.verse`) documentan empíricamente decisiones canónicas (lección 5, §2.4-bis, etc.) y se cross-referencian desde `CANARY_VALIDATION_LOG.md` con hash SHA-256.
+- **Validador (§8)**: zona regulada con regla `Verse_canary` propia (distinta de `Verse_tests`). Archivos que matchean el regex se consideran implícitamente declarados.
+- **Archivos actuales**: `throwaway_admin_state.verse` (SPR-010 Step 0 → v5 PASS, valida patrón canónico §2.4-bis "Core stateless + Device state-bearing", hash anchor `7c8d437b...`).
+- **Política de retención**: los throwaways canary NO se borran. Vivirán indefinidamente como audit trail empírico. Si una lección queda obsoleta (cambio de API Verse upstream), el throwaway permanece + se añade entry nueva en `CANARY_VALIDATION_LOG.md` documentando la regresión.
 
 ---
 
@@ -481,6 +491,7 @@ docs/
 ├── CHANGELOG.md
 ├── DAILY_LOG.md                             ← plantilla canónica + instructivo del flujo (NO archivo vivo, ver §6.2)
 ├── POSTMORTEMS_INDEX.md                     ← índice de postmortems (ver §6.3 + carpeta postmortems/)
+├── CANARY_VALIDATION_LOG.md                 ← log de throwaways canary (audit trail empírico P5, ver §4.2.1)
 │
 ├── dailylog/                                ← un archivo por día (output de scripts/tools/close_sprint.py)
 │   ├── .gitkeep
@@ -591,14 +602,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TRUTH = ROOT / "docs" / "FOLDER_STRUCTURE_TRUTH.md"
 
-# Regex de naming
+# Regex de naming (extracto — implementación real path-aware en scripts/build/00_validate_structure.py)
 NAMING_RULES = {
     "data": re.compile(r"^[a-z][a-z0-9_]*\.json$"),
     "Verse": re.compile(r"^[A-Z][A-Za-z0-9]*\.verse$"),
+    "Verse_tests": re.compile(r"^test_[A-Za-z0-9_]+\.verse$"),
+    "Verse_canary": re.compile(r"^throwaway_[A-Za-z0-9_]+\.verse$"),
     "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusDevice\.verse$"),
     "scripts_build": re.compile(r"^\d{2}_[a-z][a-z0-9_]*\.py$"),
+    "scripts_build_tests": re.compile(r"^test_[a-z][a-z0-9_]*\.py$|^__init__\.py$"),
     "docs": re.compile(r"^[A-Z][A-Z0-9_]*\.md$|^README\.md$"),
+    "docs_dailylog": re.compile(r"^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$"),
+    "docs_postmortems": re.compile(r"^PM-[A-Za-z0-9_-]+\.md$"),
 }
+# Path-aware rule selection: docs_rule_for() / scripts_build_rule_for() / verse_tests_rule_for()
+# definidos en el script real para enrutar zonas reguladas a la regla correcta según subpath.
 
 def parse_truth_paths(md_text: str) -> set[str]:
     """Extrae paths de los bloques ``` SIN lenguaje de §3, §4, §5, §6.
