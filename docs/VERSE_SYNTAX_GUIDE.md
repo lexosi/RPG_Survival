@@ -6,7 +6,7 @@
 
 ---
 
-## §1 Reglas inquebrantables (las 20 lecciones)
+## §1 Reglas inquebrantables (las 21 lecciones)
 
 ### Lección 1 — `<ProjectName>` placeholder LITERAL
 
@@ -358,6 +358,45 @@ IsAdminLogic<public>(Refs:[]player_reference_device, Agent:agent):logic=
 `if` failable consume `<decides>` propagado. Branches `{true}`/`{false}` son literals, no mutación. Sin no_rollback. Compila desde cualquier contexto.
 
 **Regla derivada**: si tienes una versión failable `<decides>` de algo, el wrapper `:logic` debe ser trivial sobre ella, no reimplementar la lógica con var. La failable es source of truth, la non-failable es proyección.
+
+### Lección 21 — Interpolación `{logic_value}` en strings falla con err 3509
+
+Validado empíricamente SPR-010-FIX1 build UEFN FAIL (++Fortnite+Release-40.30-CL-53276632):
+
+  Script error 3509: No overload of the function `ToString` matches the
+  provided arguments (:logic). Could be any of: ToString(:float),
+  ToString(:int), ToString(:[]char), ToString(:char).
+
+**Mecánica**: Verse v1 string interpolation `"{X}"` invoca `ToString(X)`. Los overloads builtin cubren `:float`, `:int`, `:[]char`, `:char`. **NO existe overload para `:logic`**. Pasarle un `logic` directo a interpolación rompe el build.
+
+```verse
+# ❌ FALLA err 3509
+IsAdmin:logic = SomeFn()
+Print("Result: {IsAdmin}")  # ToString(:logic) no existe
+```
+
+**Patrón canónico Epic-compatible**: convertir explícitamente `logic` → `string` antes de interpolar usando expresión `if/then/else` (no var/set, lección 20):
+
+```verse
+# ✅ Patrón canónico SPR-010-FIX1
+IsAdmin:logic = SomeFn()
+IsAdminStr:string = if (IsAdmin?) { "true" } else { "false" }
+Print("Result: {IsAdminStr}")
+```
+
+**Por qué `IsAdmin?` y no `IsAdmin`**: `logic` propaga a failure context mediante `?`. La expresión `if (IsAdmin?)` consume el `logic` como predicate failable. Las branches son string literales no-failable → resultado `:string` asignable a no-failure context.
+
+**Alternativa funcionalmente equivalente para casos múltiples**: helper local de conversión (útil si haces 3+ Prints con logic en el mismo OnBegin).
+
+```verse
+LogicToStr(L:logic):string=
+    if (L?) { "true" } else { "false" }
+```
+
+**Aplicación al proyecto**:
+- Todo Print/Log debug que muestre `logic` value DEBE convertir a string primero.
+- Patrón compatible con Lección 19 (Print no_rollback): la conversión ocurre FUERA del failure context, en assignment a `:string` no-failable.
+- NO usar `var` + `set` para la conversión (Lección 20 — no_rollback propagation).
 
 ---
 
