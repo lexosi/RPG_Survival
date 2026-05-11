@@ -38,9 +38,17 @@
 | Postmortems | `PM-<id>.md` (regex `^PM-[A-Za-z0-9_-]+\.md$`) — solo en `docs/postmortems/`. Permite mayús/minús/dígitos/`-`/`_`. Ver §6.3 | `PM-SPR-009-blocked.md`, `PM-RECOVERY-2026-05-08.md`, `PM-SPR-211.md` |
 | Tests Verse | `test_<snake>.verse` (regex `^test_[A-Za-z0-9_]+\.verse$`) — solo en `Content/Verse/Tests/`. Permite mayús en sufijos tipo `_SPR008`. Ver §4.2 | `test_event_bus_smoke.verse`, `test_persistence_SPR008.verse` |
 | Throwaways canary | `throwaway_<snake>.verse` (regex `^throwaway_[A-Za-z0-9_]+\.verse$`) — solo en `Content/Verse/Tests/canary/`. Audit trail empírico P5 (validación primitiva Verse). Ver §4.2.1 | `throwaway_admin_state.verse` |
-| Tests pytest | `test_<snake>.py` o `__init__.py` (regex `^test_[a-z][a-z0-9_]*\.py$\|^__init__\.py$`) — solo en `scripts/build/tests/`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case JSON). Ver §5.2 | `test_exporter_event_bus.py`, `__init__.py`, `fixtures/event_bus_expected_contract.json` |
+| Tests pytest | `test_<snake>.py` o `__init__.py` (regex `^test_[a-z][a-z0-9_]*\.py$\|^__init__\.py$`) — solo en `scripts/build/tests/`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case JSON) Y/O markdown (regex `^[a-z][a-z0-9_]*\.md$`) — el tipo del fixture depende del input bajo test (exporters JSON-driven → `.json`; parsers de docs markdown → `.md`). Ver §5.2. | `test_exporter_event_bus.py`, `__init__.py`, `fixtures/event_bus_expected_contract.json`, `fixtures/systems_index_minimal.md` |
+| Helpers `scripts/build/` | `_<snake>.py` con prefijo underscore (regex `^_[a-z][a-z0-9_]*\.py$`) — solo en `scripts/build/` (sibling al pipeline numerado). Convención canónica: módulos auxiliares importables por scripts numerados Y por tests. NO entran al pipeline (sin prefijo `NN_`). Ver §5.4 | `_systems_index_parser.py` |
 
 > **Nota sobre excepciones de Verse generado (Auditoría 3 — H3.6 + Auditoría regresión bloque 5 — H4 SPR-009)**: la lista de excepciones canónicas son ÚNICAMENTE `ModuleRegistryConstants.verse` y `EventBusDevice.verse` (decisiones D-A10 + D-A11, Auditoría 2 — C1+C3 + Auditoría regresión bloque 5 — H4). El nombre anterior `EventBusConstants.verse` queda obsoleto post-F-C-2 SPR-009 — el archivo se renombró a `EventBusDevice.verse` reflejando que el patrón vigente es `event_bus_device := class<concrete>(creative_device)` (no singleton top-level con `event_bus_module`). Verdad operativa en la regex de §8.2 línea 522. Coherente con `BOOTSTRAP_PIPELINE.md` §4.4 + `VERSE_SYNTAX_GUIDE.md` §1 lección 16. Cualquier otro archivo en `Generated/` DEBE llevar sufijo `_Generated`.
+
+> **Nota IGNORED_DIRS (Auditoría F-CLEAN-P2a, 2026-05-11)**: el validador (§8) ignora completamente las siguientes carpetas durante el escaneo de filesystem (NO se reportan en `UNDECLARED` ni `BAD_NAMING`):
+>
+> - `__pycache__/` — bytecode Python autogenerado (ya cubierto por `.gitignore`)
+> - `_throwaway/` — directorio de scratch/experimentación local (D-A14 cumple rol específico de "scratch ad-hoc por sesión" — distinto de `tools/` que son scripts persistentes). Convención: cualquier directorio raíz cuyo nombre empiece con `_` se considera scratch y se ignora.
+>
+> Esta IGNORED_DIRS es **bucket 1 transferible**: si un proyecto reutiliza el validador, hereda estas exclusiones automáticamente. Implementación en `00_validate_structure.py` set `IGNORED_DIRS`.
 
 ### 1.2 Reglas de path
 
@@ -404,7 +412,7 @@ Content/Verse/
 scripts/
 ├── init_unreal.py                           ← invocado al abrir UEFN (ver §5.1: requiere Startup Scripts si se mantiene en `scripts/`)
 │
-├── build/                                   ← pipeline ordenado (sufijo NN_)
+├── build/                                   ← pipeline ordenado (sufijo NN_) + helpers sibling (prefijo _)
 │   ├── 00_validate_structure.py             ← este doc §8 (validador estructural — primer step)
 │   ├── 01_validate_jsons.py                 ← SPR-003
 │   ├── 02_export_constants_to_verse.py      ← SPR-004 (incluye BalanceCurves SPR-134)
@@ -413,6 +421,7 @@ scripts/
 │   ├── 05_apply_theme_pack.py               ← SPR-170 (bulk swap)
 │   ├── 06_check_memory_budget.py            ← SPR-136
 │   ├── 07_run_full_pipeline.py              ← SPR-174 (orquestador)
+│   ├── _systems_index_parser.py             ← F-CLEAN-P2a (helper sibling — parser SYSTEMS_INDEX.md → mapa Path→Fase, importable por NN_ scripts y tests)
 │   └── tests/                               ← golden contract pytest tests (ver §5.2)
 │
 ├── tools/                                   ← scripts ad-hoc, sin orden
@@ -434,6 +443,7 @@ scripts/
 ### 5.1 Reglas
 
 - **`build/`**: scripts numerados se ejecutan en orden por el orquestador. Nunca añadir un `02b_` o `03_5_` — re-numerar si hace falta.
+- **Helpers sibling `_*.py` en `build/`**: módulos auxiliares (prefijo `_`) importables por scripts numerados (`NN_*.py`) Y por tests pytest. NO entran al pipeline (sin prefijo `NN_`). Ejemplo: `_systems_index_parser.py` (F-CLEAN-P2a) parsea `SYSTEMS_INDEX.md` y expone mapa `Path → Fase`, consumido por `00_validate_structure.py` (filtro `--phase`) y por `test_systems_index_parser.py` (golden contracts). Convención canónica para evitar abuso de `utils/` con código específico a `build/`. Ver §5.4.
 - **`build/tests/`**: subdir pytest (golden contracts, ver §5.2). NO se orquesta dentro del pipeline `build/`; se ejecuta vía `pytest scripts/build/tests/` standalone o en CI.
 - **`tools/`**: ad-hoc, no se orquestan. Decisión D-A14: scripts one-shot o uso manual puntual.
 - **`maintenance/`**: scripts de mantenimiento recurrente **productivo** (NO ad-hoc — ver §5.3). Distinción canónica D-A14 frente a `tools/`.
@@ -444,9 +454,9 @@ scripts/
 ### 5.2 Carpeta `scripts/build/tests/`
 
 - **Propósito**: golden contract tests pytest sobre los exporters de `build/` (validan que el output Verse generado coincide con un fixture esperado byte-a-byte modulo header). Promovido en SPR-009 F-C-3 (event bus exporter).
-- **Naming canónico**: `test_<snake>.py` (regex `^test_[a-z][a-z0-9_]*\.py$`) o `__init__.py`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case `*.json`).
+- **Naming canónico**: `test_<snake>.py` (regex `^test_[a-z][a-z0-9_]*\.py$`) o `__init__.py`. Fixtures bajo `fixtures/` siguen regla `data` (snake_case `*.json`) Y/O markdown snake_case (regex `^[a-z][a-z0-9_]*\.md$`). El tipo del fixture depende del input bajo test: exporters JSON-driven → fixtures `.json`; parsers de docs markdown (ej. `_systems_index_parser.py`) → fixtures `.md`. Validador (§8) implicit-declara ambos.
 - **Validador (§8)**: ruta `scripts/build/tests/` se enruta a regla `scripts_build_tests`; `scripts/build/tests/fixtures/` se enruta a regla `data`. Archivos que matchean se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
-- **Archivos actuales**: `__init__.py`, `test_exporter_event_bus.py`, `fixtures/event_bus_expected_contract.json` (SPR-009 F-C-3).
+- **Archivos actuales**: `__init__.py`, `test_exporter_event_bus.py`, `fixtures/event_bus_expected_contract.json` (SPR-009 F-C-3), `test_systems_index_parser.py`, `fixtures/systems_index_minimal.md` (F-CLEAN-P2a 2026-05-11).
 
 ### 5.3 Carpeta `scripts/maintenance/`
 
@@ -456,6 +466,24 @@ scripts/
   - `maintenance/`: invocados en hooks pre-flight de cada SPR o en cron CI semanal/mensual (recurrente sistemático).
 - **Naming**: `<snake_case>.{py,ps1}`. PowerShell admitido para integración Windows-first del proyecto.
 - **Archivos actuales**: `check_orphan_files.ps1` (detecta archivos en disco no referenciados en TRUTH §3-§6 ni en SYSTEMS_INDEX.md).
+
+### 5.4 Helpers sibling `scripts/build/_*.py`
+
+- **Propósito**: módulos auxiliares con código específico de `build/` — separados del pipeline ordenado (`NN_*.py`) pero compartidos entre scripts numerados Y tests pytest. Convención canónica para evitar dos anti-patrones: (a) duplicar lógica entre `NN_*.py` y `test_*.py`; (b) sobrepoblar `scripts/utils/` con código `build/`-específico (utils es para libs cross-categoría).
+- **Naming canónico**: `_<snake>.py` con prefijo underscore (regex `^_[a-z][a-z0-9_]*\.py$`). El underscore indica "no es un script standalone del pipeline" — es módulo importable.
+- **NO entran al pipeline**: el orquestador `07_run_full_pipeline.py` solo invoca `NN_*.py`. Los helpers se importan desde dentro.
+- **Tests obligatorios**: cualquier helper sibling DEBE tener `test_<helper_name_sin_underscore>.py` en `scripts/build/tests/`. Justificación: el helper sostiene lógica compartida — un bug allí rompe múltiples scripts. Cobertura pytest es defensa.
+- **Validador (§8)**: ruta `scripts/build/_*.py` se enruta a regla `scripts_build_helper` (regex `^_[a-z][a-z0-9_]*\.py$`). Archivos que matchean se consideran implícitamente declarados (no aparecen en `UNDECLARED`).
+- **Distinción canónica vs `utils/`**:
+
+  | Aspecto | `scripts/build/_*.py` (helper sibling) | `scripts/utils/*.py` |
+  |---|---|---|
+  | Scope | Código específico de `build/` | Libs cross-categoría (importables por build, tools, maintenance) |
+  | Naming | Prefijo `_` obligatorio | Sin prefijo `_` |
+  | Tests | Obligatorios en `build/tests/` | Recomendados pero no forzados |
+  | Ejemplo | `_systems_index_parser.py` (parser markdown específico SYSTEMS_INDEX) | `json_helpers.py`, `unreal_helpers.py` |
+
+- **Archivos actuales**: `_systems_index_parser.py` (F-CLEAN-P2a 2026-05-11) — parsea `docs/SYSTEMS_INDEX.md` y expone mapa `Path → Fase` para filtros `--phase` del validador estructural.
 
 ---
 
@@ -602,7 +630,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TRUTH = ROOT / "docs" / "FOLDER_STRUCTURE_TRUTH.md"
 
-# Regex de naming (extracto — implementación real path-aware en scripts/build/00_validate_structure.py)
+# Regex de naming (sync con código real F-CLEAN-P2a; implementación path-aware en scripts/build/00_validate_structure.py)
 NAMING_RULES = {
     "data": re.compile(r"^[a-z][a-z0-9_]*\.json$"),
     "Verse": re.compile(r"^[A-Z][A-Za-z0-9]*\.verse$"),
@@ -610,11 +638,15 @@ NAMING_RULES = {
     "Verse_canary": re.compile(r"^throwaway_[A-Za-z0-9_]+\.verse$"),
     "Generated": re.compile(r"^[A-Z][A-Za-z0-9]*_Generated\.verse$|^ModuleRegistryConstants\.verse$|^EventBusDevice\.verse$"),
     "scripts_build": re.compile(r"^\d{2}_[a-z][a-z0-9_]*\.py$"),
+    "scripts_build_helper": re.compile(r"^_[a-z][a-z0-9_]*\.py$"),
     "scripts_build_tests": re.compile(r"^test_[a-z][a-z0-9_]*\.py$|^__init__\.py$"),
+    "scripts_build_tests_fixtures_md": re.compile(r"^[a-z][a-z0-9_]*\.md$"),
     "docs": re.compile(r"^[A-Z][A-Z0-9_]*\.md$|^README\.md$"),
-    "docs_dailylog": re.compile(r"^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$"),
     "docs_postmortems": re.compile(r"^PM-[A-Za-z0-9_-]+\.md$"),
+    "docs_dailylog": re.compile(r"^DL_\d{4}-\d{2}-\d{2}_SPR-[\w+\-]+_[a-z0-9]+\.md$"),
 }
+# IGNORED_DIRS (Auditoría F-CLEAN-P2a): carpetas ignoradas completamente
+IGNORED_DIRS = {"__pycache__", "_throwaway"}
 # Path-aware rule selection: docs_rule_for() / scripts_build_rule_for() / verse_tests_rule_for()
 # definidos en el script real para enrutar zonas reguladas a la regla correcta según subpath.
 
@@ -742,6 +774,8 @@ if __name__ == "__main__":
         allow_missing="--allow-missing" in sys.argv,
     ))
 ```
+
+> **Nota sync NAMING_RULES (F-CLEAN-P2a 2026-05-11)**: las reglas arriba reflejan el conjunto completo implementado en `00_validate_structure.py` (verificable correr `grep -c "NAMING_RULES\[" scripts/build/00_validate_structure.py`). Cada regex tiene routing path-aware en funciones helper (`scripts_build_rule_for()`, `verse_tests_rule_for()`, `docs_rule_for()`). Si una regla nueva se añade al validador, debe sync aquí en el mismo commit (lección P5 aplicada al duo código↔TRUTH).
 
 ### 8.3 Integración con pipeline
 
