@@ -1,4 +1,4 @@
-.aider*
+﻿.aider*
 # UEFN auto-generated
 Saved/
 Intermediate/
@@ -35,14 +35,14 @@ __pycache__/
 .urc/
 
 # ==== Throwaway verifier scripts (SPR-209) ====
-# Carpeta para scripts de verificación one-shot, NO commitear el contenido.
-# Excepción: .gitkeep para que git trackee la carpeta.
+# Carpeta para scripts de verificaciÃ³n one-shot, NO commitear el contenido.
+# ExcepciÃ³n: .gitkeep para que git trackee la carpeta.
 scripts/tools/_throwaway/*
 !scripts/tools/_throwaway/.gitkeep
 
-# F-B-investigación SPR-009: directorio throwaway para tests de patrón Verse
-# Promoción a Content/Verse/Tests/ si patrón compila, else borrar.
-# Content/Verse/_throwaway_pattern_tests/
+# F-B-investigaciÃ³n SPR-009: directorio throwaway para tests de patrÃ³n Verse
+# PromociÃ³n a Content/Verse/Tests/ si patrÃ³n compila, else borrar.
+Content/Verse/_throwaway/
 
 # Claude Code local config (no commitear)
 .claude/
@@ -52,5 +52,5 @@ scripts/tools/_throwaway/*
 Content/__ExternalActors__/
 Content/__ExternalObjects__/
 
-# MCP config — paths locales por máquina, usa .mcp.json.template como guía
+# MCP config â€” paths locales por mÃ¡quina, usa .mcp.json.template como guÃ­a
 .mcp.json
