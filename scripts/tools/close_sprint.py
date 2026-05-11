@@ -20,6 +20,7 @@ Exit codes:
     1  SPR no encontrado en SPRINTS_BACKLOG (cuando aplica) o git error
     2  argumentos inválidos
     3  autor inválido
+    4  enforcement check FAIL (CHANGELOG/BACKLOG/SYSTEMS_INDEX drift)
 """
 
 from __future__ import annotations
@@ -34,11 +35,31 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+# F-CLEAN-P3: forzar UTF-8 en stdout/stderr para emojis (🟢, ⚠️, ✅) en
+# Windows console (cp1252 default). Defensivo: si reconfigure no aplica
+# (pipe, entorno raro), continuar.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
 DAILYLOG_DIR = DOCS / "dailylog"
 USER_FILE = ROOT / ".dailylog_user"
 BACKLOG = DOCS / "SPRINTS_BACKLOG.md"
+CHANGELOG = DOCS / "CHANGELOG.md"
+SYSTEMS_INDEX = DOCS / "SYSTEMS_INDEX.md"
+
+# F-CLEAN-P3: prefijos para Check 3 — archivos .verse que SÍ deben aparecer en
+# SYSTEMS_INDEX (Core, Systems, Devices). Tests/, Generated/, canary/ quedan
+# fuera del filtro positivo automáticamente.
+VERSE_CHECK_PREFIXES = (
+    "Content/Verse/Core/",
+    "Content/Verse/Systems/",
+    "Content/Verse/Devices/",
+)
 
 TAG_RE = re.compile(r"^SPR-(\d{3})(?:-FIX-(\d+))?$")
 USER_RE = re.compile(r"^[a-z0-9]+$")
@@ -411,6 +432,156 @@ def extract_manual_block(existing: str) -> str:
     return DEFAULT_MANUAL_BLOCK
 
 
+# ─── enforcement checks (F-CLEAN-P3) ──────────────────────────────────────
+
+def check_changelog_done(spr_base_id: str, fix_n: int | None) -> tuple[bool, str]:
+    """Check 1 — busca línea `- [x] SPR-XXX —` (o SPR-XXX-FIX-N) en CHANGELOG.
+
+    Devuelve (passed, message). FAIL si SPR no marcado [x].
+    """
+    if not CHANGELOG.exists():
+        return False, f"[ENFORCE FAIL] {CHANGELOG.relative_to(ROOT)} no existe"
+    text = CHANGELOG.read_text(encoding="utf-8")
+    # Buscar SPR-XXX-FIX-N primero si aplica
+    if fix_n is not None:
+        fix_id = f"{spr_base_id}-FIX-{fix_n}"
+        if re.search(rf"^- \[x\] {re.escape(fix_id)} —", text, re.MULTILINE):
+            return True, f"[ENFORCE OK] {fix_id} marcado [x] en CHANGELOG.md"
+    # Fallback: SPR-XXX base
+    if re.search(rf"^- \[x\] {re.escape(spr_base_id)} —", text, re.MULTILINE):
+        return True, f"[ENFORCE OK] {spr_base_id} marcado [x] en CHANGELOG.md"
+    search_id = f"{spr_base_id}-FIX-{fix_n}" if fix_n is not None else spr_base_id
+    return False, (
+        f"[ENFORCE FAIL] {search_id} no marcado [x] en docs/CHANGELOG.md. "
+        f"Buscado regex: ^- \\[x\\] {search_id} —"
+    )
+
+
+def check_backlog_status(spr_base_id: str) -> tuple[str, str]:
+    """Check 2 — busca fila SPR-NNN en BACKLOG con emoji 🟢 en cualquier celda.
+
+    Devuelve (status, message). status ∈ {'pass', 'warn', 'fail'}.
+    - pass: fila encontrada con 🟢
+    - fail: fila encontrada SIN 🟢
+    - warn: SPR no encontrado (¿hotfix ad-hoc sin entry?)
+    """
+    if not BACKLOG.exists():
+        return "fail", f"[ENFORCE FAIL] {BACKLOG.relative_to(ROOT)} no existe"
+    # parse_backlog_row() muta cells[0] al SPR ID — pierde info de estado embebida
+    # en cells[0] tipo "SPR-010 🟢 done". Para check 2 parseamos raw preservando
+    # cells completas + detectamos SPR ID con regex separado.
+    spr_id_re = re.compile(rf"\b{re.escape(spr_base_id)}\b")
+    for line in BACKLOG.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|") or spr_base_id not in line:
+            continue
+        cells_raw = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not cells_raw or not spr_id_re.search(cells_raw[0]):
+            continue
+        if any("🟢" in cell for cell in cells_raw):
+            return "pass", f"[ENFORCE OK] {spr_base_id} marcado 🟢 en SPRINTS_BACKLOG.md"
+        return "fail", (
+            f"[ENFORCE FAIL] {spr_base_id} en SPRINTS_BACKLOG.md pero SIN emoji 🟢 "
+            f"en ninguna celda de la fila. Marcar done antes de close_sprint."
+        )
+    return "warn", (
+        f"[ENFORCE WARN] {spr_base_id} no encontrado en docs/SPRINTS_BACKLOG.md "
+        f"(¿hotfix ad-hoc?). Si era sprint planificado, añadir entry."
+    )
+
+
+def files_changed_in_spr(tag: "SprintTag") -> list[str]:
+    """Archivos cambiados por el SPR. Primero files_today(); si vacío y tag existe,
+    fallback git diff prev_tag..tag.raw. Vacío si ambos fallan."""
+    flat = sorted({f for files in files_today().values() for f in files})
+    if flat:
+        return flat
+    tag_sha = run_git(["rev-parse", "--verify", tag.raw], check=False).strip()
+    if not tag_sha:
+        return []
+    out = run_git(["tag", "--sort=creatordate"], check=False).strip()
+    tags_ordered = [t.strip() for t in out.splitlines() if t.strip() and TAG_RE.match(t.strip())]
+    try:
+        idx = tags_ordered.index(tag.raw)
+    except ValueError:
+        return []
+    if idx == 0:
+        return []
+    prev_tag = tags_ordered[idx - 1]
+    out = run_git(["diff", "--name-only", f"{prev_tag}..{tag.raw}"], check=False)
+    return sorted({l.strip() for l in out.splitlines() if l.strip()})
+
+
+def check_systems_index_paths(verse_files: list[str]) -> tuple[str, str]:
+    """Check 3 — archivos .verse tocados en Core/Systems/Devices deben aparecer
+    en SYSTEMS_INDEX.md (parser path-aware del P2a/P2b).
+
+    Devuelve (status, message). status ∈ {'pass', 'warn', 'skip', 'fail'}.
+    - skip: ningún archivo .verse en prefijos regulados (test/docs-only SPR)
+    - pass: todos los archivos en mapping
+    - warn: algunos archivos NO en mapping
+    - fail: error parsing SYSTEMS_INDEX
+    """
+    relevant = [
+        f for f in verse_files
+        if f.endswith(".verse") and any(f.startswith(p) for p in VERSE_CHECK_PREFIXES)
+    ]
+    if not relevant:
+        return "skip", "[ENFORCE SKIP] No hay .verse en Core/Systems/Devices tocados — check 3 omitido"
+    try:
+        sys.path.insert(0, str(ROOT / "scripts" / "build"))
+        from _systems_index_parser import parse_systems_index
+        mapping = parse_systems_index(SYSTEMS_INDEX)
+    except Exception as e:
+        return "fail", f"[ENFORCE FAIL] No se pudo parsear SYSTEMS_INDEX.md: {e}"
+    missing = [f for f in relevant if f not in mapping]
+    if not missing:
+        return "pass", f"[ENFORCE OK] {len(relevant)} archivo(s) .verse declarado(s) en SYSTEMS_INDEX"
+    lines = "\n".join(f"   - {f}" for f in missing)
+    return "warn", (
+        f"[ENFORCE WARN] {len(missing)} archivo(s) .verse tocado(s) NO declarado(s) en docs/SYSTEMS_INDEX.md:\n"
+        f"{lines}\n"
+        f"  Añadir a celda Verse principal de SYS correspondiente."
+    )
+
+
+def run_enforcement(tag: "SprintTag", *, strict: bool, quiet: bool) -> int:
+    """Ejecuta los 3 checks. Devuelve exit code (0 OK / 4 FAIL)."""
+    fail_count = 0
+    warn_count = 0
+
+    passed, msg = check_changelog_done(tag.base_id, tag.fix)
+    log(msg, quiet=False)
+    if not passed:
+        fail_count += 1
+
+    status, msg = check_backlog_status(tag.base_id)
+    log(msg, quiet=False)
+    if status == "fail":
+        fail_count += 1
+    elif status == "warn":
+        warn_count += 1
+        if strict:
+            fail_count += 1
+
+    verse_files = files_changed_in_spr(tag)
+    status, msg = check_systems_index_paths(verse_files)
+    log(msg, quiet=False)
+    if status == "fail":
+        fail_count += 1
+    elif status == "warn":
+        warn_count += 1
+        if strict:
+            fail_count += 1
+
+    if fail_count > 0:
+        suffix = " (--strict elevó WARNs)" if strict and warn_count else ""
+        err(f"Enforcement checks: {fail_count} FAIL{suffix}.")
+        return 4
+    if warn_count > 0:
+        log(f"⚠️  Enforcement checks: {warn_count} WARN (sin --strict, continuando).", quiet=quiet)
+    return 0
+
+
 # ─── editor ────────────────────────────────────────────────────────────────
 
 def open_in_editor(path: Path) -> bool:
@@ -433,6 +604,8 @@ def cli() -> int:
     parser.add_argument("--reset-user", action="store_true")
     parser.add_argument("--no-open", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--strict", action="store_true",
+        help="Eleva WARN enforcement (BACKLOG/SYSTEMS_INDEX) a FAIL.")
     args = parser.parse_args()
 
     quiet = args.quiet
@@ -533,7 +706,12 @@ def cli() -> int:
     target.write_text(content, encoding="utf-8")
     log(f"✅ Daily log: {target.relative_to(ROOT)}", quiet=quiet)
 
-    # 10) abrir editor
+    # 10) enforcement checks (F-CLEAN-P3)
+    enforce_exit = run_enforcement(tag, strict=args.strict, quiet=quiet)
+    if enforce_exit != 0:
+        return enforce_exit
+
+    # 11) abrir editor
     if not args.no_open:
         if open_in_editor(target):
             log("🚀 Abierto en VS Code.", quiet=quiet)
