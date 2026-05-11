@@ -797,4 +797,37 @@ if __name__ == "__main__":
 
 ---
 
+## 10. Paths exentos de SYSTEMS_INDEX
+
+Criterio: archivos que existen en disco o están declarados en este TRUTH pero NO representan sistemas del juego, sino **infraestructura** (tooling, scripts build, helper libraries, validators offline). Estos paths NO requieren entry en `SYSTEMS_INDEX.md` porque SYSTEMS_INDEX es "catálogo de los 72+ sistemas del juego".
+
+El validador `00_validate_structure.py` filtra estos paths del cómputo `UNMAPPED` leyendo esta tabla (parser implementado en F-CLEAN-P2b, función `parse_truth_exemptions` en `_systems_index_parser.py`).
+
+| Path | Categoría | Razón exención | Origen |
+|---|---|---|---|
+| `scripts/build/03_generate_companion_prefabs.py` | Build pipeline | Tooling, no es sistema del juego | TBD F2 |
+| `scripts/build/04_generate_zone_layouts.py` | Build pipeline | Tooling | SPR-041 |
+| `scripts/build/05_apply_theme_pack.py` | Build pipeline | Tooling | SPR-170 |
+| `scripts/build/06_check_memory_budget.py` | Build pipeline | Tooling | SPR-136 |
+| `scripts/build/07_run_full_pipeline.py` | Build orquestador | Tooling | SPR-174 |
+| `scripts/tools/balance_curve_visualizer.py` | Tool dev | Utility offline | from BALANCE_FORMULAS.md |
+| `scripts/tools/dependency_cycle_check.py` | Tool validador | Validador ciclos deps Verse | SPR-205 (spec en MODULES §10.3) |
+| `scripts/tools/localization_exporter.py` | Tool dev | Exporter offline | TBD |
+| `scripts/tools/new_map_scaffolder.py` | Tool dev | Scaffolder nuevos mapas | SPR-199 |
+| `scripts/tools/texture_audit.py` | Tool dev | Auditor de texturas | sin SPR asignado |
+| `scripts/utils/unreal_helpers.py` | Util lib | Helper library | sin SPR |
+| `scripts/utils/json_helpers.py` | Util lib | Helper library | sin SPR |
+| `Content/Maps/Main.umap` | Map asset | Asset binario UEFN, creado en editor, no es sistema con fase | — |
+
+**Criterios de exención** (para añadir futuros paths):
+
+- Archivo Python en `scripts/build/`, `scripts/tools/`, `scripts/utils/`, `scripts/maintenance/` que NO es runtime del juego
+- Helper library sin relación 1-a-1 con un SYS
+- Validador/exporter offline
+- Asset binario UEFN (`.umap`, `.uasset`) creado en editor, no es sistema con fase del juego
+
+**Bucket**: §10 es bucket 1 (transferible al handbook futuro). Estructura de la tabla es replicable; entries específicas (paths concretos) son bucket 2.
+
+---
+
 **Total: 16 carpetas `data/`, 14 subcarpetas Verse, 4 subcarpetas `scripts/`. 66+ JSONs, 83 `.verse`, 17 scripts Python (1 `init_unreal` + 8 `build/` + 6 `tools/` + 2 `utils/`). 0 ambigüedades conocidas tras Auditoría retrospectiva Bloque 3 (mayo 2026; sumado `dependency_cycle_check.py` formalizado vía SPR-205) + Bloque 4 (mayo 2026; sumado `close_sprint.py` formalizado vía SPR-207, sistema dailylog).**

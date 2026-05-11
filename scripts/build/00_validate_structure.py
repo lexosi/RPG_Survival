@@ -20,7 +20,7 @@ from pathlib import Path
 # sys.path.insert garantiza que el sibling module resuelve sin importar desde
 # qué cwd se invoque el validador.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _systems_index_parser import parse_systems_index
+from _systems_index_parser import parse_systems_index, parse_truth_exemptions
 
 # SPR-001-FIX-3: forzar UTF-8 en stdout/stderr para que el validador imprima
 # limpio en cualquier consola Windows (cp1252 por defecto) sin requerir
@@ -188,14 +188,23 @@ def validate(strict: bool = False, allow_missing: bool = False, phase: str | Non
             missing.append(rel)
 
     # SPR-F-CLEAN-P2a: filtro por fase via SYSTEMS_INDEX mapping
+    # SPR-F-CLEAN-P2b: además filtro exenciones de TRUTH §10 (infra tooling).
     if phase is not None:
         try:
             systems_mapping = parse_systems_index(ROOT / "docs" / "SYSTEMS_INDEX.md")
         except Exception as e:
             print(f"[FAIL] No se pudo parsear SYSTEMS_INDEX.md: {e}", file=sys.stderr)
             return 4
+        try:
+            truth_exemptions = parse_truth_exemptions(TRUTH)
+        except Exception as e:
+            print(f"[FAIL] No se pudo parsear TRUTH §10 exemptions: {e}", file=sys.stderr)
+            return 4
         filtered_missing: list[str] = []
         for m in missing:
+            if m in truth_exemptions:
+                # Path exento de SYSTEMS_INDEX (§10 TRUTH) — no entra ni en MISSING ni UNMAPPED.
+                continue
             path_phase = systems_mapping.get(m)
             if path_phase is None:
                 missing_unmapped.append(m)

@@ -12,7 +12,7 @@ import pytest
 
 # Imports relativos al directorio padre (scripts/build/)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _systems_index_parser import parse_systems_index, get_phase_for_path
+from _systems_index_parser import parse_systems_index, get_phase_for_path, parse_truth_exemptions
 
 
 @pytest.fixture
@@ -85,3 +85,47 @@ def test_get_phase_lookup(parser_fixture):
     """get_phase_for_path lookup correcto + None para path inexistente."""
     assert get_phase_for_path("Content/Verse/Systems/Player/PlayerStats.verse", parser_fixture) == "F1"
     assert get_phase_for_path("nonexistent/path.verse", parser_fixture) is None
+
+
+def test_parse_truth_exemptions(tmp_path):
+    """parse_truth_exemptions captura paths backtick de §10 + termina en siguiente sección."""
+    fixture = tmp_path / "TRUTH_minimal.md"
+    fixture.write_text(
+        "## 9. Reglas\n\n"
+        "Algun texto.\n\n"
+        "---\n\n"
+        "## 10. Paths exentos de SYSTEMS_INDEX\n\n"
+        "Criterio: infraestructura.\n\n"
+        "| Path | Categoría | Razón | Origen |\n"
+        "|---|---|---|---|\n"
+        "| `scripts/build/07_run_full_pipeline.py` | Build orquestador | Tooling | SPR-174 |\n"
+        "| `scripts/utils/json_helpers.py` | Util lib | Helper library | sin SPR |\n\n"
+        "**Criterios**: bla bla.\n\n"
+        "---\n\n"
+        "## 11. Otra sección\n\n"
+        "| `should_not_capture.py` | algo |\n",
+        encoding="utf-8",
+    )
+    exemptions = parse_truth_exemptions(fixture)
+    assert "scripts/build/07_run_full_pipeline.py" in exemptions
+    assert "scripts/utils/json_helpers.py" in exemptions
+    assert "should_not_capture.py" not in exemptions
+
+
+def test_absolute_path_no_prefix(tmp_path):
+    """Paths con prefix repo-root (Content/, docs/, etc.) NO se prefijan con Content/Verse/."""
+    fixture = tmp_path / "absolute.md"
+    fixture.write_text(
+        "### 2.12 Cross-cutting\n\n"
+        "| ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |\n"
+        "|---|---|---|---|---|---|---|---|---|\n"
+        "| — | Main Map | Maps | F0 | — | `Content/Maps/Main.umap` | TBD | — | ⚫ |\n"
+        "| — | HOWTO | Docs | F5 | — | `docs/HOWTO_NEW_MAP.md` | SPR-203 | — | ⚫ |\n",
+        encoding="utf-8",
+    )
+    mapping = parse_systems_index(fixture)
+    # As-is, NO doble-prefix
+    assert mapping.get("Content/Maps/Main.umap") == "F0"
+    assert mapping.get("docs/HOWTO_NEW_MAP.md") == "F5"
+    assert "Content/Verse/Content/Maps/Main.umap" not in mapping
+    assert "Content/Verse/docs/HOWTO_NEW_MAP.md" not in mapping

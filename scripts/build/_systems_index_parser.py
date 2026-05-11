@@ -28,6 +28,10 @@ _SUBTABLE_HEADER_RE = re.compile(r"^### 2\.\d+ ")
 _SEPARATOR_RE = re.compile(r"^\|[\s\-:|]+\|$")
 _FASE_RE = re.compile(r"^F(\d+)")
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
+# SPR-F-CLEAN-P2b: paths con prefix absoluto repo-root (top-level dir) NO se
+# prefijan con "Content/Verse/" — se usan as-is. Cubre §2.12 entries cross-cutting
+# (Maps/, docs/) que viven fuera de Content/Verse/.
+_ABSOLUTE_PATH_RE = re.compile(r"^(Content|docs|data|scripts)/")
 
 
 def _extract_paths_from_cell(cell: str) -> list[str]:
@@ -123,7 +127,12 @@ def parse_systems_index(md_path: Path) -> dict[str, str]:
             _register(mapping, json_path, phase, row_context)
 
         for verse_path in _extract_paths_from_cell(verse_cell):
-            full = f"Content/Verse/{verse_path}"
+            # SPR-F-CLEAN-P2b: paths con prefix repo-root (Content/, docs/, etc.)
+            # se usan as-is; resto se prefija con Content/Verse/.
+            if _ABSOLUTE_PATH_RE.match(verse_path):
+                full = verse_path
+            else:
+                full = f"Content/Verse/{verse_path}"
             _register(mapping, full, phase, row_context)
 
     return mapping
@@ -146,3 +155,53 @@ def _register(mapping: dict[str, str], path: str, phase: str, ctx: str) -> None:
 def get_phase_for_path(path: str, mapping: dict[str, str]) -> str | None:
     """Lookup fase para un path. Devuelve None si no está en mapping."""
     return mapping.get(path)
+
+
+# SPR-F-CLEAN-P2b: parser de §10 TRUTH (paths exentos de SYSTEMS_INDEX).
+# Devuelve set de paths exentos — el validador los filtra del cómputo UNMAPPED.
+_TRUTH_EXEMPTION_SECTION_RE = re.compile(r"^## 10\. Paths exentos de SYSTEMS_INDEX")
+_TRUTH_NEXT_SECTION_RE = re.compile(r"^## \d+\. ")
+
+
+def parse_truth_exemptions(md_path: Path) -> set[str]:
+    """Parsea §10 de FOLDER_STRUCTURE_TRUTH.md → set de paths exentos.
+
+    Captura paths backtick-quoted en la primera columna de la tabla §10.
+    Skip header row + separator. Termina al detectar siguiente sección `##`.
+
+    Returns:
+        set[str] de paths relativos al repo root (e.g. `scripts/tools/foo.py`).
+
+    Raises:
+        FileNotFoundError: si md_path no existe.
+    """
+    if not md_path.exists():
+        raise FileNotFoundError(f"TRUTH no encontrado: {md_path}")
+
+    exemptions: set[str] = set()
+    in_section = False
+    header_seen = False
+    text = md_path.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if _TRUTH_EXEMPTION_SECTION_RE.match(line):
+            in_section = True
+            header_seen = False
+            continue
+        if not in_section:
+            continue
+        # Salir al detectar siguiente sección ## N.
+        if _TRUTH_NEXT_SECTION_RE.match(line) and not _TRUTH_EXEMPTION_SECTION_RE.match(line):
+            in_section = False
+            continue
+        if not line.startswith("|"):
+            continue
+        if _SEPARATOR_RE.match(line):
+            header_seen = True
+            continue
+        if not header_seen:
+            # Header row | Path | Categoría | ... → skip
+            continue
+        # Data row — capturar paths backtick-quoted (solo primera columna interesa)
+        for path in _BACKTICK_RE.findall(line):
+            exemptions.add(path)
+    return exemptions

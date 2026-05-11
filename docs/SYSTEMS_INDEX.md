@@ -39,13 +39,13 @@
 | ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
 |---|---|---|---|---|---|---|---|---|
 | SYS-001 | Player Stats | Core | F1 | `data/progression/player_stats_base.json` | `Systems/Player/PlayerStats.verse` | TBD | Core | ⚫ |
-| SYS-002 | Inventory | Core | F1 | `data/items/equipment.json`, `resources.json`, `consumables.json` | `Systems/Player/PlayerInventory.verse` | TBD | Inventory | ⚫ |
+| SYS-002 | Inventory | Core | F1 | `data/items/equipment.json`, `data/items/resources.json`, `data/items/consumables.json` | `Systems/Player/PlayerInventory.verse`, `Systems/UI/InventoryUI.verse` | TBD | Inventory | ⚫ |
 | SYS-003 | Resource Gathering | Core | F1 | `data/items/resources.json` | `Systems/World/ResourceNodes.verse` | TBD | — (drops van a Inventory via SYS-002) | ⚫ |
-| SYS-004 | Crafting | Core | F1 | `data/items/recipes.json` | (parte de Inventory) | TBD | — (timers en Economy via SYS-063) | ⚫ |
-| SYS-005 | Base Building | Core | F1 | `data/base/building_pieces.json` | `Systems/Base/BaseUpgrades.verse` | TBD | Economy | ⚫ |
-| SYS-006 | Combat | Core | F1 | `data/combat/damage_formulas.json` ⚠️ | `Systems/Combat/CombatCore.verse`, `DamageCalculator.verse` | TBD | — | ⚫ |
-| SYS-007 | Zone Unlock | Core | F1 | `data/zones/zone_definitions.json`, `data/zones/unlock_gates.json` | `Systems/World/ZoneManager.verse` | TBD | — (inferido de Base Level + quests) | ⚫ |
-| SYS-008 | Day/Night + Weather | Core | F1 | `data/world/day_night_cycle.json` ⚠️ | (TBD) | TBD | — | ⚫ |
+| SYS-004 | Crafting | Core | F1 | `data/items/recipes.json` | `Systems/UI/CraftingUI.verse` (lógica core en Inventory) | TBD | — (timers en Economy via SYS-063) | ⚫ |
+| SYS-005 | Base Building | Core | F1 | `data/base/building_pieces.json` | `Devices/BasePlot.verse` (lógica upgrade en SYS-060 BaseUpgrades, building core inline) | TBD | Economy | ⚫ |
+| SYS-006 | Combat | Core | F1 | `data/combat/damage_formulas.json` ⚠️ | `Systems/Combat/CombatCore.verse`, `Systems/Combat/DamageCalculator.verse` | TBD | — | ⚫ |
+| SYS-007 | Zone Unlock | Core | F1 | `data/zones/zone_definitions.json`, `data/zones/unlock_gates.json` | `Systems/World/ZoneManager.verse`, `Devices/ZonePortal.verse`, `Generated/Zones_Generated.verse` | TBD | — (inferido de Base Level + quests) | ⚫ |
+| SYS-008 | Day/Night + Weather | Core | F1 | `data/world/day_night_cycle.json` ⚠️ | `Systems/World/DayNightCycle.verse` | TBD | — | ⚫ |
 | SYS-009 | Death Penalty + Protection | Core | F1 | `data/economy/death_protection.json` ⚠️ | `Systems/Player/PlayerDeathHandler.verse` | TBD | Core (`DeathProtection_ExpiresAt`) | ⚫ |
 
 ### 2.2 Companions (SYS-010 → SYS-015)
@@ -56,7 +56,7 @@
 | SYS-011 | Rarity Tiers | Companions | F2 | `data/companions/rarities.json` ⚠️ | (parte de CompanionCore) | TBD | — | ⚫ |
 | SYS-012 | Variants | Companions | F2 | `data/companions/variants.json` | (parte de CompanionCore) | TBD | Inventory | ⚫ |
 | SYS-013 | Evolution | Companions | F2 | `data/companions/evolutions.json` | (parte de CompanionCore) | TBD | Inventory | ⚫ |
-| SYS-014 | Companion Behavior | Companions | F2 | `data/companions/behaviors.json` ⚠️ | `Systems/Companions/CompanionBehavior.verse` | TBD | — | ⚫ |
+| SYS-014 | Companion Behavior | Companions | F2 | `data/companions/behaviors.json` ⚠️ | `Systems/Companions/CompanionBehavior.verse`, `Systems/Companions/CompanionAssignment.verse` | TBD | — | ⚫ |
 | SYS-015 | Collection Dex | Companions | F2 | `data/companions/dex_rewards.json` | `Systems/Companions/CollectionDex.verse`, `Systems/UI/DexUI.verse` | TBD | Inventory | ⚫ |
 
 ### 2.3 Progression (SYS-016 → SYS-022)
@@ -66,17 +66,17 @@
 | SYS-016 | XP & Levels | Progression | F1 | `data/progression/xp_curves.json` ⚠️ | `Systems/Player/PlayerProgression.verse` | TBD | Core | ⚫ |
 | SYS-017 | Skill Points | Progression | F1 | `data/progression/skill_points.json` ⚠️ | (parte de Progression) | TBD | Core | ⚫ |
 | SYS-018 | Skill Trees | Progression | F2 | `data/progression/skill_trees.json` | `Systems/Player/PlayerSkillTree.verse` | TBD | Core (`SkillPoints_Spent`) | ⚫ |
-| SYS-019 | Active Abilities | Progression | F2 | `data/progression/abilities.json` ⚠️ | (parte de Combat) | TBD | — (cooldowns runtime-only) | ⚫ |
+| SYS-019 | Active Abilities | Progression | F2 | `data/progression/abilities.json` ⚠️ | `Systems/Combat/AbilityExecutor.verse` (parte de Combat) | TBD | — (cooldowns runtime-only) | ⚫ |
 | SYS-020 | Rebirth System | Progression | F1 | `data/progression/rebirth_rewards.json` | `Systems/Player/PlayerRebirth.verse` | TBD | Core (`RebirthCount`, `Rebirth_PermBonuses`) | ⚫ |
 | SYS-021 | Achievements | Progression | F2 | `data/progression/achievements.json` | `Systems/LiveOps/AchievementEngine.verse` | SPR-074, SPR-075, SPR-076 | Progress (bitfield 256) | ⚫ |
-| SYS-022 | Battle Pass | Progression | F3 | `data/progression/battle_pass_seasons/season_XX.json` | `Systems/LiveOps/BattlePass.verse` | TBD | Progress | ⚫ |
+| SYS-022 | Battle Pass | Progression | F3 | `data/progression/battle_pass_seasons/season_XX.json`, `data/progression/battle_pass_seasons/season_01.json`, `data/progression/battle_pass_seasons/season_02.json` | `Systems/LiveOps/BattlePass.verse` | TBD | Progress | ⚫ |
 
 ### 2.4 Equipment (SYS-023 → SYS-028)
 
 | ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
 |---|---|---|---|---|---|---|---|---|
 | SYS-023 | Equipment Slots | Equipment | F3 | `data/items/equipment_slots.json` | `Systems/Equipment/EquipmentSlots.verse` | TBD | Inventory | ⚫ |
-| SYS-024 | Equipment Stats | Equipment | F3 | `data/items/equipment.json` | (parte de Slots) | TBD | Inventory | ⚫ |
+| SYS-024 | Equipment Stats | Equipment | F3 | (stats inline en equipment.json, ver SYS-002) | (parte de Slots) | TBD | Inventory | ⚫ |
 | SYS-025 | Equipment Leveling | Equipment | F3 | `data/items/equipment_leveling.json` | `Systems/Equipment/EquipmentLeveling.verse` | TBD | Inventory | ⚫ |
 | SYS-026 | Protectors | Equipment | F3 | `data/items/protectors.json` | `Systems/Equipment/ProtectorService.verse` | TBD | Inventory | ⚫ |
 | SYS-027 | Set Bonuses | Equipment | F3 | `data/items/sets.json` | `Systems/Equipment/SetBonuses.verse` | TBD | — | ⚫ |
@@ -86,7 +86,7 @@
 
 | ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
 |---|---|---|---|---|---|---|---|---|
-| SYS-029 | Gold | Economy | F1 ⚙️ | `data/economy/gold.json` ⚠️ | `Systems/Economy/CurrencyManager.verse` | TBD | Core (`Gold`, `Gold_Overflow`) | ⚫ |
+| SYS-029 | Gold | Economy | F1 ⚙️ | `data/economy/gold.json` ⚠️, `data/economy/currency_caps.json` | `Systems/Economy/CurrencyManager.verse` | TBD | Core (`Gold`, `Gold_Overflow`) | ⚫ |
 | SYS-030 | Gems | Economy | F1 ⚙️ | `data/economy/gems.json` ⚠️ | (parte de CurrencyManager) | TBD | Core (`Gems`) + Economy (lifetime stats) | ⚫ |
 | SYS-031 | V-Bucks Integration | Economy | F3 | `data/economy/vbucks_offers.json` ⚠️ | `Systems/Economy/PurchaseService.verse` | TBD | Economy (bundles bitfield) | ⚫ |
 | SYS-032 | Shop System | Economy | F3 | `data/economy/shop.json` ⚠️ | `Systems/Economy/ShopSystem.verse`, `Systems/UI/ShopUI.verse` | TBD | — | ⚫ |
@@ -101,14 +101,14 @@
 
 | ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
 |---|---|---|---|---|---|---|---|---|
-| SYS-039 | Quest System | LiveOps | F1 | `data/quests/tutorial_chain.json`, `daily_pool.json`, `weekly_pool.json` | `Systems/Quests/QuestEngine.verse` | TBD | Progress (ActiveQuests, CompletedQuests, Daily/Weekly) | ⚫ |
+| SYS-039 | Quest System | LiveOps | F1 | `data/quests/tutorial_chain.json`, `data/quests/daily_pool.json`, `data/quests/weekly_pool.json` | `Systems/Quests/QuestEngine.verse`, `Systems/Quests/DailyQuestRotator.verse`, `Systems/Quests/WeeklyQuestRotator.verse` | TBD | Progress (ActiveQuests, CompletedQuests, Daily/Weekly) | ⚫ |
 | SYS-040 | Daily Login | LiveOps | F4 | `data/progression/daily_login.json` ⚠️ | `Systems/LiveOps/DailyLoginRewards.verse` | TBD | Progress (streak + claimed bitfield) | ⚫ |
 | SYS-041 | Time Played Rewards | LiveOps | F4 | `data/progression/time_played.json` ⚠️ | `Systems/LiveOps/TimePlayedRewards.verse` | TBD | Progress (today claimed bitfield) | ⚫ |
-| SYS-042 | Hourly Boss Event | LiveOps | F4 → F5 ⚙️ | `data/events/hourly_boss.json` | `Systems/World/HourlyBossPortal.verse`, `BossEncounters.verse` | TBD | — | ⚫ |
+| SYS-042 | Hourly Boss Event | LiveOps | F4 → F5 ⚙️ | `data/events/hourly_boss.json` | `Systems/World/HourlyBossPortal.verse`, `Systems/World/BossEncounters.verse`, `Devices/HourlyBossTrigger.verse` | TBD | — | ⚫ |
 | SYS-043 | Long Events | LiveOps | F3 | `data/events/seasonal_events.json` | `Systems/LiveOps/EventManager.verse` | TBD | — | ⚫ |
-| SYS-044 | Short Events / Admin Abuse | LiveOps | F3 | `data/events/admin_commands.json` ⚠️ | `Systems/LiveOps/EventManager.verse`, `Core/AdminCommands.verse` | TBD | — | ⚫ |
+| SYS-044 | Short Events / Admin Abuse | LiveOps | F3 | `data/events/admin_commands.json` ⚠️ | `Systems/LiveOps/EventManager.verse` (usa Core/AdminCommands.verse de SYS-070) | TBD | — | ⚫ |
 | SYS-045 | Code Redemption | LiveOps | F3 | `data/events/codes_pool.json` | `Systems/LiveOps/CodeRedemption.verse` | TBD | Progress (CodesRedeemed) | ⚫ |
-| SYS-046 | Seasonal Content Framework | LiveOps | F4 | `data/seasons/season_XX.json` ⚠️ | `Systems/LiveOps/SeasonManager.verse` | TBD | — | ⚫ |
+| SYS-046 | Seasonal Content Framework | LiveOps | F4 | `data/seasons/season_XX.json` ⚠️, `data/seasons/season_01.json` | `Systems/LiveOps/SeasonManager.verse` | TBD | — | ⚫ |
 
 ### 2.7 Social (SYS-047 → SYS-050)
 
@@ -116,7 +116,7 @@
 |---|---|---|---|---|---|---|---|---|
 | SYS-047 | Leaderboards | Social | F5 | `data/social/leaderboards.json` ⚠️ | `Systems/Social/LeaderboardSync.verse` | TBD | Progress (`LeaderboardScore_*` por stat) | ⚫ |
 | SYS-048 | Social Display | Social | F3 | `data/social/displays.json` ⚠️ | `Systems/Social/SocialDisplay.verse` | TBD | — (deriva de RebirthCount + Dex %) | ⚫ |
-| SYS-049 | Activity Log UI | Social | F1 | `data/ui/activity_log.json` ⚠️ | `Systems/Social/ActivityLogUI.verse` | TBD | — (runtime only, no persist) | ⚫ |
+| SYS-049 | Activity Log UI | Social | F1 | `data/ui/activity_log.json` ⚠️ | `Systems/Social/ActivityLogUI.verse`, `Systems/UI/HUDController.verse` (cross-cutting con SYS-050 + SYS-057) | TBD | — (runtime only, no persist) | ⚫ |
 | SYS-050 | Notifications System | Social | F1 | `data/ui/notifications.json` ⚠️ | `Systems/UI/NotificationPool.verse` | TBD | — | ⚫ |
 
 ### 2.8 Quality of Life (SYS-051 → SYS-058)
@@ -137,7 +137,7 @@
 | ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
 |---|---|---|---|---|---|---|---|---|
 | SYS-059 | Base Level | Base | F4 | `data/base/base_levels.json` | `Systems/Base/BaseLevelManager.verse` | TBD | Core (`BaseLevel`, `BaseXP`) | ⚫ |
-| SYS-060 | Base Upgrades | Base | F4 | `data/base/base_upgrades.json` | `Systems/Base/BaseUpgrades.verse` | TBD | Economy (BaseUpgrades[]) | ⚫ |
+| SYS-060 | Base Upgrades | Base | F4 | `data/base/base_upgrades.json` | `Systems/Base/BaseUpgrades.verse`, `Systems/UI/BasePanelUI.verse` | TBD | Economy (BaseUpgrades[]) | ⚫ |
 | SYS-061 | Passive Generators | Base | F4 | `data/base/generators.json` ⚠️ | `Systems/Base/PassiveGenerators.verse` | TBD | Economy (Generators_State_Pool) | ⚫ |
 | SYS-062 | Offline Production | Base | F4 | `data/base/offline_config.json` ⚠️ | `Systems/Base/OfflineCalculator.verse` | TBD | Economy (OfflineCap_LastClaim_Epoch) + Core (LastLogout_Epoch) | ⚫ |
 | SYS-063 | Crafting Timers | Base | F4 | `data/items/crafting_timers.json` ⚠️ | `Systems/Base/CraftingTimers.verse` | TBD | Economy (ActiveCrafts) | ⚫ |
@@ -160,6 +160,18 @@
 | SYS-070 | Admin Panel | Tech | F0 | `data/admin/admin_config.json` ⚠️ | `Devices/AdminPanel.verse`, `Core/AdminCommands.verse` | SPR-010 | — | ⚫ |
 | SYS-071 | Test/QA Framework | Tech | F0 | `data/admin/test_flags.json` ⚠️ | (test_devices) | TBD | — | ⚫ |
 | SYS-072 | Module Registry | Tech | F0 | `data/architecture/modules_manifest.json`, `data/architecture/events_catalog.json` | `Core/ModuleRegistry.verse`, `Core/EventBus.verse`, `Core/Logger.verse`, `Generated/ModuleRegistryConstants.verse`, `Generated/EventBusConstants.verse`, `Generated/EventPayloads_Generated.verse` | SPR-005, SPR-006, SPR-009 | — | ⚫ |
+| SYS-073 | Game Manager (root device) | Tech | F1 | — | `Devices/GameManager.verse` | TBD | — | ⚫ |
+
+### 2.12 Cross-cutting & infraestructura visible (sin SYS-XXX)
+
+Entries sin numeración SYS porque NO son sistemas del juego con scope acotado — son cross-cutting (Generated), assets standalone (Maps), o docs canónicos. Mantienen formato 9-col para que validador/parser SYSTEMS_INDEX las procese uniformemente.
+
+| ID | Sistema | Cat | Fase | JSON principal | Verse principal | Sprint | Persist | Estado |
+|---|---|---|---|---|---|---|---|---|
+| — | Balance Curves (Generated) | Tech-CC | F1 | (from BALANCE_FORMULAS.md) | `Generated/BalanceCurves_Generated.verse` | SPR-134 | — | ⚫ |
+| — | Theme Constants (Generated) | Tech-CC | F3 | (from data/theme/) | `Generated/ThemeConstants_Generated.verse` | SPR-170 | — | ⚫ |
+| — | Localization | Tech-CC | F3 | `data/theme/localization_keys.json` | (consumido vía ThemeConstants_Generated) | TBD | — | ⚫ |
+| — | HOWTO New Map (doc canónico) | Docs | F5 | — | `docs/HOWTO_NEW_MAP.md` | SPR-203 | — | ⚫ |
 
 > **Leyenda ⚠️**: JSON declarado en §8.2 del CONCEPT pero **carpeta o archivo no presente** en §11.1. Riesgo de fallo del validador. Ver §4 de este doc.
 
