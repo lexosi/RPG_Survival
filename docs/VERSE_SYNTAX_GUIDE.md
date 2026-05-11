@@ -613,6 +613,8 @@ admin_panel_device := class<concrete>(creative_device):
 
 **Cuándo elegir cada uno**: `weak_map` requiere precedente PersistenceLayer (lección 14 — namespace = carpeta). Otros tipos de state mutable → patrón §2.4-bis (Device-bearing).
 
+> **Matriz canónica completa de patrones Core** (F-CLEAN-MODULES-FIX 2026-05-11): los 3 patrones documentados en §2.1 / §2.4 / §2.4-bis están consolidados en una tabla única en `CHANGELOG.md` D-A11.2 + `MODULES_DEPENDENCY_GRAPH.md` §2.1 (inicio). Esa matriz es la **fuente única autoritativa**; este §2 desarrolla cada fila con ejemplos. Ver también anti-patrones documentados en D-A11.2.
+
 ---
 
 ## §3 Anti-patrones (con error codes y fix)

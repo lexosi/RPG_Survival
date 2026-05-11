@@ -133,17 +133,34 @@ python scripts/tools/replace_project_name.py --name=MyActualProjectName
 
 ### 2.1 Cómo inicializa Verse (no lo decidimos nosotros)
 
-> **Decisión cerrada (Auditoría 2 — C1)**. Verse inicializa **todas** las constantes a nivel de módulo (`Logger : logger_module = logger_module{}`, `Global : global = global{}`, etc.) **antes** de que cualquier `OnBegin` de `creative_device` se ejecute. No hay "orden de carga" que el desarrollador controle — el compilador resuelve el grafo de inicialización por las dependencias declaradas en compile-time (`using {}` + referencias a constantes top-level).
+> **Decisión cerrada (Auditoría 2 — C1)**. Verse inicializa **todas** las constantes a nivel de módulo **antes** de que cualquier `OnBegin` de `creative_device` se ejecute. No hay "orden de carga" que el desarrollador controle — el compilador resuelve el grafo de inicialización por las dependencias declaradas en compile-time (`using {}` + referencias a constantes top-level).
 >
 > Fuente oficial: [Constants and Variables in Verse — Epic Dev Docs](https://dev.epicgames.com/documentation/en-us/fortnite/constants-and-variables-in-verse). Patrón singleton oficial: [forums.unrealengine.com — singletons in Verse](https://forums.unrealengine.com/t/i-came-up-with-a-way-to-make-singletons-in-verse/1139453).
 
-> **Specifier `<concrete>` obligatorio (decisión cerrada Auditoría 3 — H3.1)**: el tipo `<x>_module` que se instancia con archetype vacío (`<x>_module{}`) DEBE declararse como `class<concrete>:`, no como `class:` ni como `module:`. Razón ([dev.epicgames.com — Class in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/class-in-verse)): *"When a class has the concrete specifier, it is possible to construct it with an empty archetype, such as cat{}. This means that every field of the class must have a default value."* Sin `<concrete>` el constructor `<x>_module{}` no compila garantizadamente. Aplica a (1) **5 de los 6 Core** (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + ModuleRegistry — singletons top-level instanciados con `<x>_module{}`, y (2) los Systems registrables Capa 2+ (PlayerStats, PlayerInventory, CurrencyManager, etc.) — se instancian con `<id>_module{}` en `OnBegin` del device antes de registrarse en el Registry. **Excepción D-A11**: EventBus NO se instancia con `event_bus_module{}` top-level (patrón obsoleto post-F-C-2 SPR-009). El patrón vigente es `event_bus_device := class<concrete>(creative_device):` instanciado en Main.umap como actor del nivel — el `<concrete>` específico del device sigue siendo obligatorio (la propiedad `@editable` lo construye con archetype vacío `event_bus_device{}` cuando se le hace drag&drop), pero el lifecycle de instanciación es UEFN runtime, no top-level Verse. NO confundir con `module := module:` (palabra reservada de namespace, distinta sintaxis sin archetype).
+#### Matriz canónica patrones Core (F-CLEAN-MODULES-FIX 2026-05-11, ver CHANGELOG D-A11.2)
+
+Tres patrones canónicos vigentes para archivos en `Content/Verse/Core/` y devices que cumplen rol Core operativo. Verificación empírica de los 6 archivos Core + AdminPanel device confirmó esta matriz; el resto de §2.1 + §4 invocan esta tabla como referencia.
+
+| Tipo de Core | Patrón Verse | Cuándo usar | Ejemplos vigentes |
+|---|---|---|---|
+| Stateless namespace | `Name<public> := module:` | Funciones puras, constantes, utilities sin state mutable | Logger, TimeSync, BigNumbers, ModuleRegistry, EventBus (placeholder), AdminCommands |
+| Top-level scope sin wrapper | classes `<final><persistable>` + `var X:weak_map(...)` directos al file | Necesita weak_map state (lección 5: var top-level solo weak_map; lección 14 / VERSE_GUIDE §2.4: cápsula state) | PersistenceLayer (4 weak_maps) |
+| Device state-bearing | `name_device := class<concrete>(creative_device):` con `@editable` refs | State runtime no-weak_map (player refs, scene anchors, async events Verse v1) | AdminPanel (state `@editable`), event_bus_device operativo (Generated) |
+
+**Anti-patrones documentados** (no usar):
+
+- `Name := name_module{}` archetype top-level — afirmado D-A11 pre-corrección, NUNCA aplicado empíricamente. 0 Cores en disco usan este patrón. Ver errata D-A11 en CHANGELOG.
+- `var X:int = 0` top-level fuera de `weak_map` — viola lección 5 VERSE_SYNTAX_GUIDE.
+- `event(t){}` literal top-level — viola lección 16 (err 3512: propaga `<transacts>` al contexto top-level `<computes>` puro).
+- `module:` con `var` interno mutable — no soportado por gramática Verse v1. Usar top-level scope (PersistenceLayer) o device state-bearing (AdminPanel).
+
+> **Specifier `<concrete>` obligatorio (decisión cerrada Auditoría 3 — H3.1, vigente solo para `creative_device` y types instanciados con archetype)**: el specifier `<concrete>` aplica al patrón "Device state-bearing" (`name_device := class<concrete>(creative_device):`) y a structs/classes con archetype vacío `Type{}`. Razón ([dev.epicgames.com — Class in Verse](https://dev.epicgames.com/documentation/en-us/fortnite/class-in-verse)): *"When a class has the concrete specifier, it is possible to construct it with an empty archetype, such as cat{}. This means that every field of the class must have a default value."* **NO aplica a los 6 Cores `module:` namespace** — `module:` no usa archetype, no necesita `<concrete>`. El patrón legacy `<x>_module := class<concrete>:` + `<x> = <x>_module{}` quedó obsoleto en SPR-211 (falla err 3512 — clases con métodos `<decides>` propagan `<transacts>` al instance top-level `<computes>` puro).
 
 #### Implicación arquitectónica
 
-**5 de los 6 módulos Core son singletons estáticos top-level. NO heredan de `creative_device`. NO se registran en `ModuleRegistry`. Se acceden directamente con `using { /<ProjectName>/Core/<NombreModulo> }`. Los 5 son: Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands.**
+**Los 6 archivos Core viven en file-scope top-level (Verse los inicializa antes de cualquier `OnBegin`). 5 usan patrón `module:` namespace, 1 (PersistenceLayer) usa top-level scope sin wrapper por restricción weak_map (lección 5). NO heredan de `creative_device`. NO se registran en `ModuleRegistry`. Se acceden directamente con `using { /<ProjectName>/Core/<NombreModulo> }` o `using { Verse.Core.<NombreModulo> }` (dotted relative).**
 
-**Excepción D-A11 (post-SPR-009 F-C resolution)**: **EventBus es un `creative_device`**, NO singleton top-level — el patrón top-level falla con err 3512 al instanciar `event(t){}` (lección 16 VERSE_SYNTAX_GUIDE). El device se instancia en Main.umap y se referencia desde otros devices vía `@editable Bus:event_bus_device`. Detalle en §4.2 + `BOOTSTRAP_PIPELINE.md` §11.
+**Excepción D-A11 (post-SPR-009 F-C resolution)**: el **EventBus operativo** es un `creative_device` generado (`Generated/EventBusDevice.verse`), NO archivo Core directo — el patrón top-level falla con err 3512 al instanciar `event(t){}` (lección 16 VERSE_SYNTAX_GUIDE). El device se instancia en Main.umap y se referencia desde otros devices vía `@editable Bus:event_bus_device`. El archivo `Core/EventBus.verse` queda como placeholder mínimo `module:` (anchor source-controlled, ver §4.2). Detalle en §4.2 + `BOOTSTRAP_PIPELINE.md` §11.
 
 ```verse
 # Patrón canónico vigente (post SPR-211) para Core sin state
@@ -199,7 +216,7 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 
 ### 2.2 Race conditions evitadas
 
-- ✅ Core son singletons top-level → vivos antes que cualquier Systems los necesite.
+- ✅ Core son módulos top-level (`module:` namespace o file-scope sin wrapper, ver matriz §2.1) → vivos antes que cualquier Systems los necesite.
 - ✅ `Generated/*` son constantes inmutables → vivas antes que cualquier Systems las lea (Capa 1 inicializa antes que Capa 2 por dependencia compile-time).
 - ✅ `PlayerStats` lee `Generated/PlayerStats_Generated.verse` → Generated existe en compile-time.
 - ✅ `AchievementEngine` se conecta a eventos en su propio `OnBegin()` (llamado por UEFN cuando el device arranca) → no hay deps compile-time hacia los emisores, solo runtime via `spawn { loop { Payload := Bus.<Evento>.Await() ; ... } }` por evento (un task spawneado por cada `event(payload_t)` del catálogo, ver §11.2). Patrón canónico Verse v1 — `event(t)` builtin no implementa `subscribable`, ver `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
@@ -282,14 +299,14 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 - 📤 Deps: ninguna en compile-time como módulo source-controlled (el archivo manual es placeholder mínimo). El **EventBus operativo** vive en `Generated/EventBusDevice.verse` (archivo generado por SPR-004 ext desde `data/architecture/events_catalog.json`).
 - 📥 Consumidores: ~40 devices que emiten/escuchan eventos. Cada device referencia `Generated/EventBusDevice` vía `using { /<ProjectName>/Generated/EventBusDevice }` + propiedad `@editable Bus:event_bus_device = event_bus_device{}` (drag&drop la instancia en UEFN al editar el device).
 - ⚡ **Las dependencias runtime de eventos NO se reflejan aquí** (ver §11.2).
-- 🏗️ **Arquitectura (C1 + C3 + H4)**: el "EventBus" del proyecto es un `creative_device` **generado** desde `data/architecture/events_catalog.json`. Compone instancias `event(payload_t)` builtin Verse v1 (= `class(signalable(t), awaitable(t))`, ver `Verse.digest`). Type-safety garantizada por compilador. Sin string-magic, sin `Payload:any`. **NO singleton top-level** — el patrón top-level (`event_bus_module := class<concrete>:` + `EventBus<public> : event_bus_module = event_bus_module{}`) falla con err 3512 (`event(t){}` top-level propaga `<transacts>` al contexto top-level `<computes>` puro — lección 16 VERSE_SYNTAX_GUIDE). Solución vigente: `event_bus_device<public> := class<concrete>(creative_device):` con las propiedades `event(t)` como miembros. La instancia operativa se coloca en Main.umap como actor del nivel. **Excepción explícita a D-A7** (que declara los 6 Cores como singletons top-level): solo EventBus es device; los otros 5 Cores (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + Registry siguen siendo singletons top-level. Decisión arquitectónica D-A11 (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution). Detalle del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42. API consumer en `API_REFERENCE_GENERATED.md` §3.5. Lección syntax canónica en `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
+- 🏗️ **Arquitectura (C1 + C3 + H4)**: el "EventBus" del proyecto es un `creative_device` **generado** desde `data/architecture/events_catalog.json`. Compone instancias `event(payload_t)` builtin Verse v1 (= `class(signalable(t), awaitable(t))`, ver `Verse.digest`). Type-safety garantizada por compilador. Sin string-magic, sin `Payload:any`. **NO singleton top-level** — el patrón top-level (`event_bus_module := class<concrete>:` + `EventBus<public> : event_bus_module = event_bus_module{}`) falla con err 3512 (`event(t){}` top-level propaga `<transacts>` al contexto top-level `<computes>` puro — lección 16 VERSE_SYNTAX_GUIDE). Solución vigente: `event_bus_device<public> := class<concrete>(creative_device):` con las propiedades `event(t)` como miembros. La instancia operativa se coloca en Main.umap como actor del nivel. **Excepción explícita a D-A7** (que declara los 6 Cores como módulos top-level, ver matriz canónica §2.1): solo EventBus operativo es device; los otros 5 Cores (Logger, TimeSync, PersistenceLayer, BigNumbers, AdminCommands) + Registry siguen file-scope top-level con patrón `module:` namespace (Logger, TimeSync, BigNumbers, AdminCommands, ModuleRegistry) o sin wrapper (PersistenceLayer, justificado lección 5 weak_map). Decisión arquitectónica D-A11 (Auditoría regresión bloque 5 — H4 SPR-009 F-C resolution). Detalle del patrón en `BOOTSTRAP_PIPELINE.md` §11. Schema del catálogo en `JSON_SCHEMAS.md` §42. API consumer en `API_REFERENCE_GENERATED.md` §3.5. Lección syntax canónica en `VERSE_SYNTAX_GUIDE.md` §1 lección 16.
 - 🔧 **Patrón consumer canónico (post-F-C-3a)**: `event(t)` builtin Verse v1 NO implementa `subscribable` — `.Subscribe(handler)` y `.Unsubscribe(handler)` **no existen**. Único mecanismo de consumo = `Await()`. Listener persistente = `spawn { ListenerFn() } ; Sleep(0.0)` post-spawn + `ListenerFn()<suspends>:void= loop { Payload := Bus.<Evento>.Await() ; <handler>(Payload) }`. `Sleep(0.0)` post-spawn obligatorio (evita race Signal-antes-de-Await). `Signal()` síncrono (handlers Await resumen dentro de Signal antes de retornar). Validado runtime SPR-009 F-C-3a.
 
 ### 4.3 `Core/TimeSync.verse` (SYS-068, SPR-007)
 
 - 📤 Deps: `Logger` 🔒
 - 📥 Consumidores: `RotatingShop`, `DailyLoginRewards`, `TimePlayedRewards`, `HourlyBossPortal`, `EventManager`, `SeasonManager`, `OfflineCalculator`, `CraftingTimers`, `BattlePass`
-- 🏗️ **Arquitectura**: singleton top-level. Mismo patrón que Logger (§4.1).
+- 🏗️ **Arquitectura**: módulo namespace (`TimeSync<public> := module:`). Mismo patrón Stateless namespace que Logger (§4.1) — ver matriz §2.1.
 
 ### 4.4 `Core/PersistenceLayer.verse` (SYS-069, SPR-008)
 
@@ -304,7 +321,7 @@ Capa 5 — Devices        → creative_device instanciados en UEFN editor. OnBeg
 
 - 📤 Deps: `Logger` 🔒
 - 📥 Consumidores: `CurrencyManager`, `PassiveGenerators`, `OfflineCalculator`, `BattlePass`, `PlayerProgression`
-- 🏗️ **Arquitectura**: wrapper de la lib comunidad. Funciones puras (`FromInt`, `Add`, etc.) accesibles vía `using`. Sin estado, no necesita singleton — pero se documenta como Core porque pertenece a Capa 0.
+- 🏗️ **Arquitectura**: módulo namespace (`BigNumbers<public> := module:`). Patrón Stateless namespace (matriz §2.1). Wrapper de lib comunidad — funciones puras (`FromInt`, `Add`, `Format`, etc.) accesibles vía `using`. Sin state mutable — pertenece a Capa 0 por rol cross-cutting.
 
 ### 4.6 `Core/AdminCommands.verse` (SYS-070, SPR-010)
 
@@ -355,7 +372,7 @@ Cross-ref: `CHANGELOG.md` entrada B1.1-fix L3 (lección P5).
 
 - 📤 Deps: `Logger` 🔒, `Generated/ModuleRegistryConstants` 🔒
 - 📥 Consumidores: **Systems gameplay (Capa 2+)** que necesitan resolver dependencias cruzadas sin import compile-time circular. NO los Core.
-- 🏗️ **Arquitectura**: singleton top-level. Mismo patrón que Logger (§4.1).
+- 🏗️ **Arquitectura**: módulo namespace (`ModuleRegistry<public> := module:`). Mismo patrón Stateless namespace que Logger (§4.1) — ver matriz §2.1.
 
 #### Qué hace y qué NO hace
 
