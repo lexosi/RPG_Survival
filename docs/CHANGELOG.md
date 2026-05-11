@@ -1056,16 +1056,45 @@ Próximo: Auditoría 2 (lógica de integración), Auditoría 3 (rendimiento + ec
 
 > **Sistemas core técnicos: Module Registry, Logger, TimeSync, PersistenceLayer, EventBus, AdminCommands.**
 
+### F-CLEAN-P1 (2026-05-11) — Materialización Core placeholders + sync drift checkboxes
+
+> **Contexto**: pre-cierre F0 (post-SPR-010 commit `0479851`). Análisis 148 MISSING
+> reveló drift histórico: 3 Core declarados done en docs sin materializar archivo.
+
+**Cores materializados como placeholders mínimos**:
+- `Content/Verse/Core/BigNumbers.verse` — SYS-067 (sin SPR asignado históricamente)
+- `Content/Verse/Core/ModuleRegistry.verse` — SPR-005 (drift cierre done sin disco)
+- `Content/Verse/Core/EventBus.verse` — SPR-009 (criterio L622 "[x] placeholder source-controlled" sin disco)
+
+Cada placeholder:
+- Cabecera estándar (formato Logger.verse / TimeSync.verse)
+- Documenta el "ESTADO PLACEHOLDER" + razón del drift + cómo se implementará real
+- 1 función stub mínima para verificar que compila (build PASS criteria)
+- NO importa desde otros consumers — anchor source-controlled solamente
+
+**Drift documental relacionado detectado (NO se corrige en P1)**:
+- MODULES §2.1 + §4 + CHANGELOG D-A11 declaran "5 Cores son singletons top-level
+  `class<concrete>:`". Realidad empírica (Logger.verse, TimeSync.verse,
+  PersistenceLayer.verse build PASS): son `module:` namespace. Sync pendiente
+  en mini-sprint dedicado.
+
+**Sync checkboxes [v0.1]**: SPR-001..SPR-009 estaban `[ ]` cuando son 🟢 done
+en SPRINTS_BACKLOG. Corregidos a `[x]` con metadata.
+
+**Tags retroactivos creados**: `SPR-005-PLACEHOLDER` (apuntando al commit P1
+que materializa ModuleRegistry.verse), `SPR-009-PLACEHOLDER` (idem para
+EventBus.verse). Audit trail honesto del cierre real vs declaración previa.
+
 ### Sprints planificados (de CONCEPT 13.3)
-- [ ] SPR-001 — Setup del repo y carpetas
-- [ ] SPR-002 — JSON schemas base
-- [ ] SPR-003 — Python: validador de JSONs
-- [ ] SPR-004 — Python: exporter a constantes Verse
-- [ ] SPR-005 — Verse: Module Registry
-- [ ] SPR-006 — Verse: Logger
-- [ ] SPR-007 — Verse: Time Sync (UTC)
-- [ ] SPR-008 — Verse: Persistence Layer
-- [ ] SPR-009 — Verse: Event Bus interno
+- [x] SPR-001 — Setup del repo y carpetas (done — verificar tag)
+- [x] SPR-002 — JSON schemas base (done — verificar tag)
+- [x] SPR-003 — Python: validador de JSONs (done — verificar tag)
+- [x] SPR-004 — Python: exporter a constantes Verse (done — verificar tag)
+- [x] SPR-005 — Verse: Module Registry (done, placeholder materializado F-CLEAN-P1 2026-05-11)
+- [x] SPR-006 — Verse: Logger (done — verificar tag)
+- [x] SPR-007 — Verse: Time Sync (UTC) (done — verificar tag)
+- [x] SPR-008 — Verse: Persistence Layer (done 2026-05-08, tag `SPR-008-step1`)
+- [x] SPR-009 — Verse: Event Bus interno (done, placeholder materializado F-CLEAN-P1 2026-05-11, EventBusDevice operativo pendiente SPR-004 ext F1)
 - [x] SPR-010 — Verse: Admin Commands (done 2026-05-11, commit `f65c97d`, tag `SPR-010`)
 
 ### Sprints de test asociados (TESTING_PROTOCOL 4.3)
